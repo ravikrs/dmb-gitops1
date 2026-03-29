@@ -7,8 +7,8 @@ name: Promote Image
 #   { "service": "in-car-api", "image": "acrdmb.azurecr.io/dmb/dmb-in-car-api", "tag": "sha-abc1234" }
 #
 # Promotion model:
-#   eu-dev    → auto-commit to main (no gate)
-#   eu-staging → PR opened for human review (gate: staging=true in promotion-gates.json)
+#   eu-dev    → auto-commit on every tag
+#   eu-staging → PR opened only for semver tags (v1.2.3); stale PRs superseded
 #   eu-prod   → PR opened after staging PR is merged (handled by promote-stage.yml)
 
 on:
@@ -45,19 +45,15 @@ env:
   GIT_USER_EMAIL: github-actions[bot]@users.noreply.github.com
 
 jobs:
-  # ── GATES ──────────────────────────────────────────────────────────────────────
-  # Read .github/promotion-gates.json and expose per-env booleans as outputs.
-  # Missing file or missing service key defaults dev=true, staging/prod=false.
-  check-gates:
-    name: Check promotion gates
+  # ── eu-dev (auto-commit) ───────────────────────────────────────────────────────
+  promote-dev:
+    name: Deploy to eu-dev
     runs-on: ubuntu-latest
-    outputs:
-      dev:     ${{ steps.read.outputs.dev }}
-      staging: ${{ steps.read.outputs.staging }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Validate inputs
         env:
@@ -69,7 +65,7 @@ jobs:
             echo "ERROR: invalid SERVICE value: '$SERVICE'"
             exit 1
           fi
-          if ! [[ "$IMAGE" =~ ^(ghcr\.io|[a-z0-9]+\.azurecr\.io)/[a-z0-9._/-]+$ ]]; then
+          if ! [[ "$IMAGE" =~ ^acrdmb\.azurecr\.io/[a-z0-9._/-]+$ ]]; then
             echo "ERROR: invalid IMAGE value: '$IMAGE'"
             exit 1
           fi
@@ -78,36 +74,6 @@ jobs:
             exit 1
           fi
           echo "Inputs validated: service=${SERVICE} image=${IMAGE} tag=${TAG}"
-
-      - name: Read gates
-        id: read
-        env:
-          SERVICE: ${{ env.SERVICE }}
-        run: |
-          GATES_FILE=".github/promotion-gates.json"
-          if [[ ! -f "$GATES_FILE" ]]; then
-            echo "Gates file not found — defaulting dev=true, staging=false."
-            echo "dev=true"      >> "$GITHUB_OUTPUT"
-            echo "staging=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          DEV=$(jq -r --arg svc "$SERVICE" '.[$svc].dev // true' "$GATES_FILE")
-          STAGING=$(jq -r --arg svc "$SERVICE" '.[$svc].staging // false' "$GATES_FILE")
-          echo "Gates for ${SERVICE}: dev=${DEV} staging=${STAGING}"
-          echo "dev=${DEV}"         >> "$GITHUB_OUTPUT"
-          echo "staging=${STAGING}" >> "$GITHUB_OUTPUT"
-
-  # ── eu-dev (auto-commit) ───────────────────────────────────────────────────────
-  promote-dev:
-    name: Deploy to eu-dev
-    needs: check-gates
-    if: needs.check-gates.outputs.dev == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update image tag in eu-dev
         env:
@@ -149,21 +115,50 @@ jobs:
             }
           done
 
-  # ── eu-staging (PR) ────────────────────────────────────────────────────────────
-  # Opens a PR targeting main. Branch name encodes env/service/tag so that
-  # promote-stage.yml can parse it on merge and open the prod PR automatically.
+  # ── eu-staging (PR, semver tags only) ─────────────────────────────────────────
+  # Opens a PR only when the tag is a semver release (v1.2.3).
+  # Branch name encodes env/service/tag so that promote-stage.yml can parse it
+  # on merge and open the prod PR automatically.
   open-staging-pr:
     name: Open staging PR
-    needs: [check-gates, promote-dev]
-    if: needs.check-gates.outputs.staging == 'true'
+    needs: promote-dev
     runs-on: ubuntu-latest
     steps:
+      - name: Check if release tag
+        id: tag-check
+        env:
+          TAG: ${{ env.TAG }}
+        run: |
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+            echo "Tag '${TAG}' is not a semver release — skipping staging PR."
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.tag-check.outputs.is_release == 'true'
         with:
           ref: main
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Close stale staging PRs for this service
+        if: steps.tag-check.outputs.is_release == 'true'
+        env:
+          SERVICE:  ${{ env.SERVICE }}
+          TAG:      ${{ env.TAG }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr list --base main --state open --json number,headRefName \
+            | jq -r --arg svc "$SERVICE" \
+                '.[] | select(.headRefName | startswith("promote/eu-staging/\($svc)/")) | .number' \
+            | while read -r num; do
+                echo "Closing stale staging PR #${num} (superseded by ${TAG})"
+                gh pr close "$num" --comment "Superseded by ${TAG}"
+              done
+
       - name: Create promotion branch and update tag
+        if: steps.tag-check.outputs.is_release == 'true'
         env:
           SERVICE: ${{ env.SERVICE }}
           TAG:     ${{ env.TAG }}
@@ -185,6 +180,7 @@ jobs:
           git push origin "$BRANCH"
 
       - name: Open pull request
+        if: steps.tag-check.outputs.is_release == 'true'
         env:
           SERVICE:  ${{ env.SERVICE }}
           IMAGE:    ${{ env.IMAGE }}
@@ -198,13 +194,13 @@ jobs:
             --title "Promote ${SERVICE}:${TAG} to eu-staging" \
             --body "## Image Promotion: eu-staging
 
-| Field   | Value |
-|---------|-------|
-| Service | \`${SERVICE}\` |
-| Image   | \`${IMAGE}\` |
-| Tag     | \`${TAG}\` |
-| Target  | eu-staging |
+          | Field   | Value |
+          |---------|-------|
+          | Service | \`${SERVICE}\` |
+          | Image   | \`${IMAGE}\` |
+          | Tag     | \`${TAG}\` |
+          | Target  | eu-staging |
 
-Merging will update \`teams/dmb/eu-staging/services/${SERVICE}.yaml\` and trigger ArgoCD to sync eu-staging.
+          Merging will update \`teams/dmb/eu-staging/services/${SERVICE}.yaml\` and trigger ArgoCD to sync eu-staging.
 
-After merge, a prod PR will be opened automatically by \`promote-stage.yml\`."
+          After merge, a prod PR will be opened automatically by \`promote-stage.yml\`."

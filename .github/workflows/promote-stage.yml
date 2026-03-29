@@ -125,15 +125,15 @@ jobs:
             --title "Promote ${SERVICE}:${TAG} to eu-prod" \
             --body "## Image Promotion: eu-prod
 
-| Field   | Value |
-|---------|-------|
-| Service | \`${SERVICE}\` |
-| Tag     | \`${TAG}\` |
-| Target  | eu-prod |
+          | Field   | Value |
+          |---------|-------|
+          | Service | \`${SERVICE}\` |
+          | Tag     | \`${TAG}\` |
+          | Target  | eu-prod |
 
-This PR was opened automatically after the eu-staging promotion PR was merged.
+          This PR was opened automatically after the eu-staging promotion PR was merged.
 
-Merging will update the eu-prod values file and trigger ArgoCD to sync eu-prod."
+          Merging will update the eu-prod values file and trigger ArgoCD to sync eu-prod."
 
   # ── MANUAL: promote between any two environments ────────────────────────────────
   promote-manual:
@@ -209,11 +209,11 @@ Merging will update the eu-prod values file and trigger ArgoCD to sync eu-prod."
             --title "Promote ${SERVICE}:${TAG} to ${TO_ENV}" \
             --body "## Manual Image Promotion
 
-| Field   | Value |
-|---------|-------|
-| Service | \`${SERVICE}\` |
-| Tag     | \`${TAG}\` |
-| From    | ${FROM_ENV} |
-| Target  | ${TO_ENV} |
+          | Field   | Value |
+          |---------|-------|
+          | Service | \`${SERVICE}\` |
+          | Tag     | \`${TAG}\` |
+          | From    | ${FROM_ENV} |
+          | Target  | ${TO_ENV} |
 
-Merging will update the ${TO_ENV} values file and trigger ArgoCD to sync."
+          Merging will update the ${TO_ENV} values file and trigger ArgoCD to sync."

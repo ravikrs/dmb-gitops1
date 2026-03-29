@@ -16,29 +16,30 @@ Four GitHub Actions workflows cover chart validation and image promotion across 
 ## Promotion Model
 
 ```
-App CI builds image
+App CI builds image  (every merge → SHA tag; release cut → v1.2.3)
        │
        ▼
 repository_dispatch ──► promote-image.yml or promote-gateway.yml
                               │
-                    ┌─────────┴──────────┐
-                    ▼                    ▼
-             [dev gate=true]      [staging gate=true]
-             auto-commit           opens staging PR
-             to main                     │
-                │                        │ (human review + merge)
-                ▼                        ▼
-         ArgoCD syncs           promote-stage.yml fires
-           eu-dev               opens prod PR
-                                         │
-                                         │ (human review + merge)
-                                         ▼
-                                  ArgoCD syncs eu-prod
+                    ┌─────────┴──────────────────────┐
+                    ▼                                 ▼
+             always: auto-commit            semver tag only (v1.2.3):
+             to eu-dev                      opens eu-staging PR
+                │                                     │
+                │                                     │ (human review + merge)
+                ▼                                     ▼
+         ArgoCD syncs                    promote-stage.yml fires
+           eu-dev                        opens eu-prod PR
+                                                      │
+                                                      │ (human review + merge)
+                                                      ▼
+                                             ArgoCD syncs eu-prod
 ```
 
-- **eu-dev**: fully automated — workflow commits the new tag directly to main.
-- **eu-staging**: PR-based — a branch `promote/eu-staging/<service>/<tag>` is opened for review.
+- **eu-dev**: fully automated — every tag auto-commits directly to main.
+- **eu-staging**: PR-based, **semver tags only** (`v1.2.3`) — a branch `promote/eu-staging/<service>/<tag>` is opened. If a newer semver tag arrives before the PR is merged, the old PR is closed with a "Superseded" comment and a new one is opened.
 - **eu-prod**: PR-based — opened automatically by `promote-stage.yml` when the staging PR is merged.
+- **api-gateway**: dev is auto as above; staging/prod promotion is **manual only** via `workflow_dispatch` on `promote-gateway.yml`. Gateway does not follow a semver filter.
 
 ---
 
@@ -52,26 +53,22 @@ Runs in a 4-way matrix (one job per chart). Each job:
 
 The eu-dev values files use `CHANGEME` placeholders which render as strings; this is intentional and does not cause failures.
 
+**Scope of linting:** the workflow runs the full 4-way matrix on every trigger — all 4 charts are always linted, regardless of which files changed. The path trigger (`charts/**`, `teams/**`) controls *when* the workflow fires, not which jobs run within it. So changing a single gateway values file lints all 4 charts. This is intentional: the matrix is cheap and avoids the complexity of mapping changed paths to chart names. If the number of charts grows significantly, `dorny/paths-filter` can be added to scope jobs to only affected charts.
+
 **To extend:** if a new chart is added under `charts/`, add it to the `matrix.chart` list and add a `case` block in the smoke render step.
 
 ---
 
-## Promotion Gates (`.github/promotion-gates.json`)
+## Promotion Gates
 
-Controls which services are allowed to promote to each environment:
+There is no gates file. The gate for staging promotion is the image tag itself:
 
-```json
-{
-  "in-car-api": { "dev": true, "staging": false, "prod": false },
-  ...
-}
-```
+- **SHA tags** (e.g. `sha-abc1234`) → eu-dev only, no staging PR
+- **Semver tags** (e.g. `v1.2.3`) → eu-dev auto-commit + eu-staging PR
 
-- `dev: true` — auto-commit is enabled (default for all services)
-- `staging: false` — staging PR will not be opened (default until eu-staging is provisioned)
-- `prod` is not read by the workflow directly; prod promotion always goes through `promote-stage.yml`
+This is enforced in `promote-image.yml` with a regex check (`^v[0-9]+\.[0-9]+\.[0-9]+$`) before the staging PR steps run. No per-service configuration is needed — all 5 Spring Boot services follow the same policy.
 
-To enable staging promotion for a service: set `"staging": true` in the gates file.
+If a service needs to be blocked from staging temporarily, don't cut a semver release tag for it.
 
 ---
 

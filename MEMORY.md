@@ -14,8 +14,8 @@
 - POSTGRES_HOST must be injected as env var in service values files (not in applicationProperties) since it's not in any ExternalSecret
 - Design decisions doc: docs/02-design-decisions.md
 - CI/CD: 4 workflows in `.github/workflows/` — helm-lint, promote-image, promote-gateway, promote-stage
-- Promotion model: dev=auto-commit to main; staging=PR on branch `promote/eu-staging/{service}/{tag}`; prod=PR auto-opened by promote-stage.yml when staging PR merges
-- Gateway image uses separate workflow (promote-gateway.yml) because values file path differs (`api-gateway-values.yaml` vs `services/{service}.yaml`)
-- Promotion gates: `.github/promotion-gates.json` — staging/prod default false until env provisioned; flip to true to enable
+- Promotion model: dev=auto on every tag; staging=PR only for semver tags (v1.2.3); prod=PR auto-opened by promote-stage.yml on staging merge; stale staging PRs superseded on new semver
+- Gateway image uses separate workflow (promote-gateway.yml); gateway staging is manual-only (workflow_dispatch) — no semver filter; values file path differs (`api-gateway-values.yaml`)
+- No promotion-gates.json — semver tag regex is the gate for staging; no per-service config needed
 - App CI triggers promotion via `repository_dispatch: image-updated` (services) or `gateway-updated` (gateway); needs `GITOPS_DISPATCH_TOKEN` PAT in app repo
 - CI/CD doc: docs/03-ci-cd-pipelines.md

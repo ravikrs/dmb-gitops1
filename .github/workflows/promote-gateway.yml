@@ -9,7 +9,7 @@ name: Promote Gateway
 #
 # Promotion model:
 #   eu-dev    → auto-commit to main
-#   eu-staging → PR opened for human review
+#   eu-staging → PR opened only via workflow_dispatch (manual); no auto-promotion
 #   eu-prod   → PR opened after staging PR is merged (handled by promote-stage.yml)
 
 on:
@@ -39,24 +39,22 @@ env:
   GIT_USER_EMAIL: github-actions[bot]@users.noreply.github.com
 
 jobs:
-  # ── GATES ──────────────────────────────────────────────────────────────────────
-  check-gates:
-    name: Check promotion gates
+  # ── eu-dev (auto-commit) ───────────────────────────────────────────────────────
+  promote-dev:
+    name: Deploy to eu-dev
     runs-on: ubuntu-latest
-    outputs:
-      dev:     ${{ steps.read.outputs.dev }}
-      staging: ${{ steps.read.outputs.staging }}
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Validate inputs
         env:
           IMAGE: ${{ env.IMAGE }}
           TAG:   ${{ env.TAG }}
         run: |
-          if ! [[ "$IMAGE" =~ ^(ghcr\.io|[a-z0-9]+\.azurecr\.io)/[a-z0-9._/-]+$ ]]; then
+          if ! [[ "$IMAGE" =~ ^acrdmb\.azurecr\.io/[a-z0-9._/-]+$ ]]; then
             echo "ERROR: invalid IMAGE value: '$IMAGE'"
             exit 1
           fi
@@ -65,34 +63,6 @@ jobs:
             exit 1
           fi
           echo "Inputs validated: image=${IMAGE} tag=${TAG}"
-
-      - name: Read gates
-        id: read
-        run: |
-          GATES_FILE=".github/promotion-gates.json"
-          if [[ ! -f "$GATES_FILE" ]]; then
-            echo "Gates file not found — defaulting dev=true, staging=false."
-            echo "dev=true"      >> "$GITHUB_OUTPUT"
-            echo "staging=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          DEV=$(jq -r '."api-gateway".dev // true' "$GATES_FILE")
-          STAGING=$(jq -r '."api-gateway".staging // false' "$GATES_FILE")
-          echo "Gates for api-gateway: dev=${DEV} staging=${STAGING}"
-          echo "dev=${DEV}"         >> "$GITHUB_OUTPUT"
-          echo "staging=${STAGING}" >> "$GITHUB_OUTPUT"
-
-  # ── eu-dev (auto-commit) ───────────────────────────────────────────────────────
-  promote-dev:
-    name: Deploy to eu-dev
-    needs: check-gates
-    if: needs.check-gates.outputs.dev == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Update image tag in eu-dev
         env:
@@ -125,11 +95,13 @@ jobs:
             }
           done
 
-  # ── eu-staging (PR) ────────────────────────────────────────────────────────────
+  # ── eu-staging (PR, manual only) ──────────────────────────────────────────────
+  # Gateway staging promotion is always manual — only runs on workflow_dispatch.
+  # repository_dispatch from gateway CI only promotes to dev.
   open-staging-pr:
     name: Open staging PR
-    needs: [check-gates, promote-dev]
-    if: needs.check-gates.outputs.staging == 'true'
+    needs: promote-dev
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -164,13 +136,13 @@ jobs:
             --title "Promote api-gateway:${TAG} to eu-staging" \
             --body "## Image Promotion: eu-staging
 
-| Field   | Value |
-|---------|-------|
-| Service | \`api-gateway\` |
-| Image   | \`${IMAGE}\` |
-| Tag     | \`${TAG}\` |
-| Target  | eu-staging |
+          | Field   | Value |
+          |---------|-------|
+          | Service | \`api-gateway\` |
+          | Image   | \`${IMAGE}\` |
+          | Tag     | \`${TAG}\` |
+          | Target  | eu-staging |
 
-Merging will update \`teams/dmb/eu-staging/api-gateway-values.yaml\` and trigger ArgoCD to sync eu-staging.
+          Merging will update \`teams/dmb/eu-staging/api-gateway-values.yaml\` and trigger ArgoCD to sync eu-staging.
 
-After merge, a prod PR will be opened automatically by \`promote-stage.yml\`."
+          After merge, a prod PR will be opened automatically by \`promote-stage.yml\`."

@@ -85,3 +85,15 @@ Key decisions made when designing this repo, with rationale, for future referenc
 **Why:** Adding a new service requires dropping one YAML file — no changes to charts or ArgoCD manifests. This is the same pattern used in the reference repo for the Rancher cluster. It scales naturally.
 
 **Per-service files** provide `nameOverride` (which ApplicationSet uses for application naming and values file path resolution) plus service-specific overrides on top of `_shared.yaml`.
+
+---
+
+## 10. `_shared.yaml` naming convention (underscore prefix)
+
+**Decision:** The shared values baseline per environment is named `_shared.yaml`, not `shared.yaml`.
+
+**Why (visual sorting):** The `_` prefix sorts before any alphabetically-named service file (`api.yaml`, `worker.yaml`, etc.) in directory listings, making it immediately obvious that this file is a base layer, not a service definition.
+
+**Why (disambiguation):** The ApplicationSet git file generator discovers service entries via `teams/dmb/{env}/services/*.yaml`. The `_shared.yaml` file lives one level up (directly in `teams/dmb/{env}/`) and its name signals clearly that it is infrastructure, not a discoverable service. This prevents any accidental match if glob patterns ever widen.
+
+**Trade-off:** The underscore is a convention, not enforced by tooling. If renamed to `shared.yaml`, ArgoCD would still work — the filename is hardcoded in the ApplicationSet `valueFiles` list, not discovered. The underscore is purely a readability signal.

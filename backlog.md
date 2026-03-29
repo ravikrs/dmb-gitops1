@@ -17,6 +17,8 @@
 ## Done
 - [x] Reliability improvements: startupProbe, /tmp emptyDir, HPA template, PDB staging/prod fix, sed→yq, git push retry, eu-staging smoke render
 - [x] Add GitHub Actions CI/CD: helm-lint, promote-image, promote-gateway, promote-stage workflows
+- [x] Improve promotion model: semver tag filter for staging, remove promotion-gates.json, stale PR superseding, gateway manual-only staging, fix YAML PR body indentation bug in all promotion workflows
+- [x] Restrict IMAGE validation to `acrdmb.azurecr.io` only in promote-image.yml and promote-gateway.yml
 - [x] Bootstrap repo structure with 4 charts and ApplicationSet wiring
 - [x] Create dmb-service shared chart (consolidated 5 Spring Boot services)
 - [x] Create dmb-namespace chart (SecretStore, ExternalSecrets, SA, NetworkPolicy)
