@@ -19,3 +19,5 @@
 - No promotion-gates.json — semver tag regex is the gate for staging; no per-service config needed
 - App CI triggers promotion via `repository_dispatch: image-updated` (services) or `gateway-updated` (gateway); needs `GITOPS_DISPATCH_TOKEN` PAT in app repo
 - CI/CD doc: docs/03-ci-cd-pipelines.md
+- oauth2-proxy HTTPRoute routes `/oauth2` prefix; backendRef name = `.Release.Name` (not `<release>-oauth2-proxy`) — upstream subchart fullname dedup applies when release name contains chart name
+- Dependabot configured in `.github/dependabot.yml` (helm, /charts/oauth2-proxy, weekly) — tracks Chart.yaml dependencies only, not image tags
