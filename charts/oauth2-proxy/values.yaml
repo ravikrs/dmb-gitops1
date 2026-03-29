@@ -1,0 +1,49 @@
+pdb:
+  minAvailable: 0
+
+oauth2-proxy:
+  image:
+    registry: cariad.azurecr.io
+    repository: dmb/oauth2-proxy
+    tag: v7.14.3
+
+  config:
+    existingSecret: CHANGEME     # e.g. dev-oauth2-proxy-secrets (created by dmb-namespace chart)
+    configFile: |-
+      email_domains = [ "*" ]
+      upstreams = [ "static://200" ]
+
+  extraArgs:
+    provider: keycloak-oidc
+    provider-display-name: "Cloud IDP"
+    oidc-issuer-url: CHANGEME
+    redirect-url: CHANGEME
+    oidc-email-claim: "name"
+    scope: "openid"
+    code-challenge-method: S256
+    cookie-secure: "true"
+    cookie-expire: "12h"
+    cookie-refresh: "25m"
+    insecure-oidc-allow-unverified-email: "true"
+    skip-jwt-bearer-tokens: "true"
+    pass-access-token: "true"
+    pass-authorization-header: "false"
+    pass-user-headers: "false"
+    set-authorization-header: "false"
+    set-xauthrequest: "false"
+
+  # nginx Ingress is deprecated — expose via Gateway API HTTPRoute instead.
+  # Configure HTTPRoute in the clusters/ ArgoCD Application valuesObject if needed.
+  ingress:
+    enabled: false
+
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "256Mi"
+      cpu: "300m"
+
+  metrics:
+    enabled: false

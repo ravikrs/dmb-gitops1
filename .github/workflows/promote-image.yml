@@ -1,0 +1,210 @@
+name: Promote Image
+
+# Triggered by dmb-services via repository_dispatch after a new image is pushed
+# to ACR. Also supports workflow_dispatch for manual promotions.
+#
+# Dispatch payload:
+#   { "service": "in-car-api", "image": "acrdmb.azurecr.io/dmb/dmb-in-car-api", "tag": "sha-abc1234" }
+#
+# Promotion model:
+#   eu-dev    → auto-commit to main (no gate)
+#   eu-staging → PR opened for human review (gate: staging=true in promotion-gates.json)
+#   eu-prod   → PR opened after staging PR is merged (handled by promote-stage.yml)
+
+on:
+  repository_dispatch:
+    types: [image-updated]
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service name (e.g. in-car-api)'
+        required: true
+      image:
+        description: 'Full image reference (e.g. acrdmb.azurecr.io/dmb/dmb-in-car-api)'
+        required: true
+      tag:
+        description: 'New image tag (e.g. sha-abc1234 or v1.2.3)'
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# Cancel an in-flight run for the same service if a newer tag arrives.
+concurrency:
+  group: promote-${{ github.event.client_payload.service || inputs.service }}
+  cancel-in-progress: true
+
+# Resolve inputs into env vars once so run: blocks never embed GitHub expressions
+# directly in shell — guards against expression injection.
+env:
+  SERVICE: ${{ github.event.client_payload.service || inputs.service }}
+  IMAGE:   ${{ github.event.client_payload.image   || inputs.image }}
+  TAG:     ${{ github.event.client_payload.tag     || inputs.tag }}
+  GIT_USER_NAME:  github-actions[bot]
+  GIT_USER_EMAIL: github-actions[bot]@users.noreply.github.com
+
+jobs:
+  # ── GATES ──────────────────────────────────────────────────────────────────────
+  # Read .github/promotion-gates.json and expose per-env booleans as outputs.
+  # Missing file or missing service key defaults dev=true, staging/prod=false.
+  check-gates:
+    name: Check promotion gates
+    runs-on: ubuntu-latest
+    outputs:
+      dev:     ${{ steps.read.outputs.dev }}
+      staging: ${{ steps.read.outputs.staging }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Validate inputs
+        env:
+          SERVICE: ${{ env.SERVICE }}
+          IMAGE:   ${{ env.IMAGE }}
+          TAG:     ${{ env.TAG }}
+        run: |
+          if ! [[ "$SERVICE" =~ ^[a-z0-9-]+$ ]]; then
+            echo "ERROR: invalid SERVICE value: '$SERVICE'"
+            exit 1
+          fi
+          if ! [[ "$IMAGE" =~ ^(ghcr\.io|[a-z0-9]+\.azurecr\.io)/[a-z0-9._/-]+$ ]]; then
+            echo "ERROR: invalid IMAGE value: '$IMAGE'"
+            exit 1
+          fi
+          if ! [[ "$TAG" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+            echo "ERROR: invalid TAG value: '$TAG'"
+            exit 1
+          fi
+          echo "Inputs validated: service=${SERVICE} image=${IMAGE} tag=${TAG}"
+
+      - name: Read gates
+        id: read
+        env:
+          SERVICE: ${{ env.SERVICE }}
+        run: |
+          GATES_FILE=".github/promotion-gates.json"
+          if [[ ! -f "$GATES_FILE" ]]; then
+            echo "Gates file not found — defaulting dev=true, staging=false."
+            echo "dev=true"      >> "$GITHUB_OUTPUT"
+            echo "staging=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          DEV=$(jq -r --arg svc "$SERVICE" '.[$svc].dev // true' "$GATES_FILE")
+          STAGING=$(jq -r --arg svc "$SERVICE" '.[$svc].staging // false' "$GATES_FILE")
+          echo "Gates for ${SERVICE}: dev=${DEV} staging=${STAGING}"
+          echo "dev=${DEV}"         >> "$GITHUB_OUTPUT"
+          echo "staging=${STAGING}" >> "$GITHUB_OUTPUT"
+
+  # ── eu-dev (auto-commit) ───────────────────────────────────────────────────────
+  promote-dev:
+    name: Deploy to eu-dev
+    needs: check-gates
+    if: needs.check-gates.outputs.dev == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update image tag in eu-dev
+        env:
+          SERVICE: ${{ env.SERVICE }}
+          TAG:     ${{ env.TAG }}
+        run: |
+          git pull --rebase origin main
+          FILE="teams/dmb/eu-dev/services/${SERVICE}.yaml"
+
+          if [[ ! -f "$FILE" ]]; then
+            echo "ERROR: values file not found: $FILE"
+            echo "Known services: $(ls teams/dmb/eu-dev/services/)"
+            exit 1
+          fi
+
+          yq e '.image.tag = strenv("TAG")' -i "$FILE"
+          echo "Updated $FILE:"
+          grep "tag:" "$FILE"
+
+      - name: Commit and push
+        env:
+          SERVICE: ${{ env.SERVICE }}
+          TAG:     ${{ env.TAG }}
+        run: |
+          git config user.name  "${GIT_USER_NAME}"
+          git config user.email "${GIT_USER_EMAIL}"
+          git add "teams/dmb/eu-dev/services/${SERVICE}.yaml"
+          if git diff --staged --quiet; then
+            echo "eu-dev/${SERVICE} already at ${TAG}, skipping commit."
+            exit 0
+          fi
+          git commit -m "chore(dev): promote ${SERVICE} to ${TAG}"
+          # Retry up to 3 times in case another service promotion pushes concurrently.
+          for attempt in 1 2 3; do
+            git push origin main && break || {
+              if [[ $attempt -eq 3 ]]; then echo "Push failed after 3 attempts"; exit 1; fi
+              echo "Push rejected (attempt ${attempt}), rebasing..."
+              git pull --rebase origin main
+            }
+          done
+
+  # ── eu-staging (PR) ────────────────────────────────────────────────────────────
+  # Opens a PR targeting main. Branch name encodes env/service/tag so that
+  # promote-stage.yml can parse it on merge and open the prod PR automatically.
+  open-staging-pr:
+    name: Open staging PR
+    needs: [check-gates, promote-dev]
+    if: needs.check-gates.outputs.staging == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create promotion branch and update tag
+        env:
+          SERVICE: ${{ env.SERVICE }}
+          TAG:     ${{ env.TAG }}
+        run: |
+          BRANCH="promote/eu-staging/${SERVICE}/${TAG}"
+          git config user.name  "${GIT_USER_NAME}"
+          git config user.email "${GIT_USER_EMAIL}"
+          git checkout -b "$BRANCH"
+
+          FILE="teams/dmb/eu-staging/services/${SERVICE}.yaml"
+          if [[ ! -f "$FILE" ]]; then
+            echo "ERROR: values file not found: $FILE"
+            exit 1
+          fi
+
+          yq e '.image.tag = strenv("TAG")' -i "$FILE"
+          git add "$FILE"
+          git commit -m "chore(staging): promote ${SERVICE} to ${TAG}"
+          git push origin "$BRANCH"
+
+      - name: Open pull request
+        env:
+          SERVICE:  ${{ env.SERVICE }}
+          IMAGE:    ${{ env.IMAGE }}
+          TAG:      ${{ env.TAG }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="promote/eu-staging/${SERVICE}/${TAG}"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Promote ${SERVICE}:${TAG} to eu-staging" \
+            --body "## Image Promotion: eu-staging
+
+| Field   | Value |
+|---------|-------|
+| Service | \`${SERVICE}\` |
+| Image   | \`${IMAGE}\` |
+| Tag     | \`${TAG}\` |
+| Target  | eu-staging |
+
+Merging will update \`teams/dmb/eu-staging/services/${SERVICE}.yaml\` and trigger ArgoCD to sync eu-staging.
+
+After merge, a prod PR will be opened automatically by \`promote-stage.yml\`."

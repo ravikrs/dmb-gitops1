@@ -1,0 +1,32 @@
+{{- if or .Values.externalAccess.azure .Values.externalAccess.vwGroup }}
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: allow-external-services
+  namespace: {{ .Values.env.namespace }}
+spec:
+  endpointSelector: {}
+  egress:
+    {{- range .Values.externalAccess.azure }}
+    - toFQDNs:
+        - matchName: {{ .fqdn }}
+      toPorts:
+        - ports:
+            {{- range .ports }}
+            - port: {{ . | quote }}
+              protocol: TCP
+            {{- end }}
+    {{- end }}
+    {{- range .Values.externalAccess.vwGroup }}
+    - toFQDNs:
+        {{- range .fqdns }}
+        - matchName: {{ . }}
+        {{- end }}
+      toPorts:
+        - ports:
+            {{- range .ports }}
+            - port: {{ . | quote }}
+              protocol: TCP
+            {{- end }}
+    {{- end }}
+{{- end }}

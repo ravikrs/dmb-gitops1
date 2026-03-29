@@ -1,0 +1,219 @@
+name: Promote Stage
+
+# Two triggers:
+#
+# 1. Automatic: fires when a promotion PR is merged to main.
+#    Branch name pattern: promote/<env>/<service>/<tag>
+#    On merge of a promote/eu-staging/* branch, opens a prod PR for the same service+tag.
+#
+# 2. Manual (workflow_dispatch): promote whatever tag is currently live in one
+#    environment to another (e.g. staging → prod, dev → staging).
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      service:
+        description: 'Service name (e.g. in-car-api, api-gateway)'
+        required: true
+      tag:
+        description: 'Image tag to promote'
+        required: true
+      from_env:
+        description: 'Source environment'
+        required: true
+        default: eu-staging
+        type: choice
+        options: [eu-dev, eu-staging]
+      to_env:
+        description: 'Target environment'
+        required: true
+        default: eu-prod
+        type: choice
+        options: [eu-staging, eu-prod]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  GIT_USER_NAME:  github-actions[bot]
+  GIT_USER_EMAIL: github-actions[bot]@users.noreply.github.com
+
+jobs:
+  # ── AUTO: staging PR merged → open prod PR ─────────────────────────────────────
+  open-prod-pr:
+    name: Open prod PR (from merged staging PR)
+    # Only run when a staging promotion PR was actually merged (not just closed).
+    # github.head_ref is listed as risky; it's resolved to a shell env var (BRANCH)
+    # and values parsed from it are regex-validated before use.
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'promote/eu-staging/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Parse branch name: promote/eu-staging/<service>/<tag>
+      # BRANCH is resolved from the expression into a shell env var here; all
+      # subsequent use is via $BRANCH (never inline expressions in run: scripts).
+      - name: Extract service and tag from branch
+        id: parse
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          REMAINDER="${BRANCH#promote/eu-staging/}"
+          TAG="${REMAINDER##*/}"
+          SERVICE="${REMAINDER%/*}"
+
+          if ! [[ "$SERVICE" =~ ^[a-z0-9-]+$ ]]; then
+            echo "ERROR: could not parse a valid service from branch '$BRANCH'"
+            exit 1
+          fi
+          if ! [[ "$TAG" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+            echo "ERROR: could not parse a valid tag from branch '$BRANCH'"
+            exit 1
+          fi
+
+          echo "service=${SERVICE}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}"         >> "$GITHUB_OUTPUT"
+          echo "Parsed: service=${SERVICE} tag=${TAG}"
+
+      - name: Create prod promotion branch
+        env:
+          SERVICE: ${{ steps.parse.outputs.service }}
+          TAG:     ${{ steps.parse.outputs.tag }}
+        run: |
+          BRANCH="promote/eu-prod/${SERVICE}/${TAG}"
+          git config user.name  "${GIT_USER_NAME}"
+          git config user.email "${GIT_USER_EMAIL}"
+          git checkout -b "$BRANCH"
+
+          # api-gateway uses a top-level file; other services use services/<service>.yaml.
+          if [[ "$SERVICE" == "api-gateway" ]]; then
+            FILE="teams/dmb/eu-prod/api-gateway-values.yaml"
+          else
+            FILE="teams/dmb/eu-prod/services/${SERVICE}.yaml"
+          fi
+
+          if [[ ! -f "$FILE" ]]; then
+            echo "ERROR: values file not found: $FILE"
+            exit 1
+          fi
+
+          yq e '.image.tag = strenv("TAG")' -i "$FILE"
+          git add "$FILE"
+          git commit -m "chore(prod): promote ${SERVICE} to ${TAG}"
+          git push origin "$BRANCH"
+
+      - name: Open pull request
+        env:
+          SERVICE:  ${{ steps.parse.outputs.service }}
+          TAG:      ${{ steps.parse.outputs.tag }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="promote/eu-prod/${SERVICE}/${TAG}"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Promote ${SERVICE}:${TAG} to eu-prod" \
+            --body "## Image Promotion: eu-prod
+
+| Field   | Value |
+|---------|-------|
+| Service | \`${SERVICE}\` |
+| Tag     | \`${TAG}\` |
+| Target  | eu-prod |
+
+This PR was opened automatically after the eu-staging promotion PR was merged.
+
+Merging will update the eu-prod values file and trigger ArgoCD to sync eu-prod."
+
+  # ── MANUAL: promote between any two environments ────────────────────────────────
+  promote-manual:
+    name: Manual promote ${{ inputs.service }} to ${{ inputs.to_env }}
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate inputs
+        env:
+          SERVICE:  ${{ inputs.service }}
+          TAG:      ${{ inputs.tag }}
+          FROM_ENV: ${{ inputs.from_env }}
+          TO_ENV:   ${{ inputs.to_env }}
+        run: |
+          if ! [[ "$SERVICE" =~ ^[a-z0-9-]+$ ]]; then
+            echo "ERROR: invalid SERVICE value: '$SERVICE'"
+            exit 1
+          fi
+          if ! [[ "$TAG" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+            echo "ERROR: invalid TAG value: '$TAG'"
+            exit 1
+          fi
+          if [[ "$FROM_ENV" == "$TO_ENV" ]]; then
+            echo "ERROR: from_env and to_env must differ"
+            exit 1
+          fi
+          echo "Inputs validated: service=${SERVICE} tag=${TAG} ${FROM_ENV} → ${TO_ENV}"
+
+      - name: Create promotion branch
+        env:
+          SERVICE: ${{ inputs.service }}
+          TAG:     ${{ inputs.tag }}
+          TO_ENV:  ${{ inputs.to_env }}
+        run: |
+          BRANCH="promote/${TO_ENV}/${SERVICE}/${TAG}"
+          git config user.name  "${GIT_USER_NAME}"
+          git config user.email "${GIT_USER_EMAIL}"
+          git checkout -b "$BRANCH"
+
+          if [[ "$SERVICE" == "api-gateway" ]]; then
+            FILE="teams/dmb/${TO_ENV}/api-gateway-values.yaml"
+          else
+            FILE="teams/dmb/${TO_ENV}/services/${SERVICE}.yaml"
+          fi
+
+          if [[ ! -f "$FILE" ]]; then
+            echo "ERROR: values file not found: $FILE"
+            exit 1
+          fi
+
+          yq e '.image.tag = strenv("TAG")' -i "$FILE"
+          git add "$FILE"
+          git commit -m "chore(${TO_ENV#eu-}): promote ${SERVICE} to ${TAG}"
+          git push origin "$BRANCH"
+
+      - name: Open pull request
+        env:
+          SERVICE:  ${{ inputs.service }}
+          TAG:      ${{ inputs.tag }}
+          FROM_ENV: ${{ inputs.from_env }}
+          TO_ENV:   ${{ inputs.to_env }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="promote/${TO_ENV}/${SERVICE}/${TAG}"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Promote ${SERVICE}:${TAG} to ${TO_ENV}" \
+            --body "## Manual Image Promotion
+
+| Field   | Value |
+|---------|-------|
+| Service | \`${SERVICE}\` |
+| Tag     | \`${TAG}\` |
+| From    | ${FROM_ENV} |
+| Target  | ${TO_ENV} |
+
+Merging will update the ${TO_ENV} values file and trigger ArgoCD to sync."

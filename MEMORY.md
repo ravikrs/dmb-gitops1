@@ -1,0 +1,21 @@
+# MEMORY
+
+- Repo purpose: GitOps repo for DMB dev team — Helm charts + ArgoCD ApplicationSets for dmb-dev/staging/prod namespaces
+- 3 clusters (eu-dev, eu-staging, eu-prod), each with own ArgoCD, dev team owns one namespace per cluster
+- 4 charts: dmb-service (5 Spring Boot services), api-gateway (KrakenD), oauth2-proxy (wrapper), dmb-namespace (bootstrap)
+- Single ConfigMap per Spring Boot service (applicationProperties: {}), mounted via SPRING_CONFIG_ADDITIONAL_LOCATION
+- Ingress strategy: Gateway API HTTPRoute + Traefik (nginx Ingress deprecated, KrakenD kept for now)
+- Cilium CNI → CiliumNetworkPolicy throughout
+- Secret management: ESO + Azure Key Vault, namespace-scoped SecretStore in dmb-namespace chart
+- ApplicationSet pattern: git file-based generator, one values file per service under teams/dmb/{env}/services/
+- Source charts: /Users/ravisingh/rks/gh/ravikrs/digital-manual-infrastructure/charts/
+- Reference patterns: /Users/ravisingh/rks/gh/ravikrs/dmb-gitops/
+- oauth2-proxy chart needs `helm dependency update charts/oauth2-proxy` before first use (upstream chart not vendored)
+- POSTGRES_HOST must be injected as env var in service values files (not in applicationProperties) since it's not in any ExternalSecret
+- Design decisions doc: docs/02-design-decisions.md
+- CI/CD: 4 workflows in `.github/workflows/` — helm-lint, promote-image, promote-gateway, promote-stage
+- Promotion model: dev=auto-commit to main; staging=PR on branch `promote/eu-staging/{service}/{tag}`; prod=PR auto-opened by promote-stage.yml when staging PR merges
+- Gateway image uses separate workflow (promote-gateway.yml) because values file path differs (`api-gateway-values.yaml` vs `services/{service}.yaml`)
+- Promotion gates: `.github/promotion-gates.json` — staging/prod default false until env provisioned; flip to true to enable
+- App CI triggers promotion via `repository_dispatch: image-updated` (services) or `gateway-updated` (gateway); needs `GITOPS_DISPATCH_TOKEN` PAT in app repo
+- CI/CD doc: docs/03-ci-cd-pipelines.md

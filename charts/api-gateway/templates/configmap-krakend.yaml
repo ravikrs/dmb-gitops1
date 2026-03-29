@@ -1,0 +1,375 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "{{ .Release.Name }}-krakend-config"
+  labels:
+    app: "{{ .Release.Name }}-app"
+data:
+  krakend.json: |
+    {
+      "version": 3,
+      "name": "DMB API Gateway",
+      "port": {{ .Values.env.KRAKEND_PORT }},
+      "plugin": {
+        "pattern": ".so",
+        "folder": "plugins/"
+      },
+      "extra_config": {
+        "plugin/http-server": {
+          "name": ["request-header-logging", "trace-context"],
+          "request-header-logging": {
+            "log_client_ip_address": false
+          }
+        },
+        "router": {
+          "auto_options": true,
+          "hide_version_header": true,
+          "logger_skip_paths": ["/__health"],
+          "disable_access_log": true
+        },
+        "telemetry/logging": {
+          "level": "INFO",
+          "syslog": false,
+          "stdout": true,
+          "format": "logstash"
+        }
+      },
+      "endpoints": [
+        {
+          "endpoint": "/api/mib/V1/downloadPackages/{fileName}/{token}",
+          "method": "GET",
+          "output_encoding": "no-op",
+          "input_headers": ["Authorization"],
+          "extra_config": {
+            "plugin/req-resp-modifier": {
+              "name": ["token-validation"],
+              "token-validation": {
+                "vas": {
+                  "styp": ["T1"],
+                  "issuer": "{{ .Values.env.vas.issuer }}",
+                  "jwk_url": "{{ .Values.env.vas.jwkUrl }}"
+                }
+              }
+            }
+          },
+          "backend": [
+            {
+              "host": ["https://{{ .Values.env.blobStorage.inCarPackageAccountName }}.blob.core.windows.net"],
+              "url_pattern": "/in-car-package-storage/{fileName}",
+              "method": "GET",
+              "encoding": "no-op",
+              "extra_config": {
+                "auth/client-credentials": {
+                  "client_id": "{{ "{{" }} env "BLOB_OAUTH_CLIENT_ID" {{ "}}" }}",
+                  "client_secret": "{{ "{{" }} env "BLOB_OAUTH_CLIENT_SECRET" {{ "}}" }}",
+                  "token_url": "https://login.microsoftonline.com/{{ .Values.env.tenantId }}/oauth2/v2.0/token",
+                  "scopes": "https://storage.azure.com/.default"
+                },
+                "backend/http": {
+                  "return_error_details": true
+                },
+                "modifier/martian": {
+                  "header.Modifier": {
+                    "scope": ["request"],
+                    "name": "x-ms-version",
+                    "value": "2026-02-06"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "endpoint": "/default/api/mib/V1/downloadPackages/{fileName}/{token}",
+          "method": "GET",
+          "output_encoding": "no-op",
+          "input_headers": ["Authorization"],
+          "extra_config": {
+            "plugin/req-resp-modifier": {
+              "name": ["token-validation"],
+              "token-validation": {
+                "vas": {
+                  "styp": ["T1"],
+                  "issuer": "{{ .Values.env.vas.issuer }}",
+                  "jwk_url": "{{ .Values.env.vas.jwkUrl }}"
+                }
+              }
+            }
+          },
+          "backend": [
+            {
+              "host": ["https://{{ .Values.env.blobStorage.inCarPackageAccountName }}.blob.core.windows.net"],
+              "url_pattern": "/in-car-package-storage-{{ .Values.env.deploymentRegion }}-vw/{fileName}",
+              "method": "GET",
+              "encoding": "no-op",
+              "extra_config": {
+                "auth/client-credentials": {
+                  "client_id": "{{ "{{" }} env "BLOB_OAUTH_CLIENT_ID" {{ "}}" }}",
+                  "client_secret": "{{ "{{" }} env "BLOB_OAUTH_CLIENT_SECRET" {{ "}}" }}",
+                  "token_url": "https://login.microsoftonline.com/{{ .Values.env.tenantId }}/oauth2/v2.0/token",
+                  "scopes": "https://storage.azure.com/.default"
+                },
+                "backend/http": {
+                  "return_error_details": true
+                },
+                "modifier/martian": {
+                  "header.Modifier": {
+                    "scope": ["request"],
+                    "name": "x-ms-version",
+                    "value": "2026-02-06"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "endpoint": "/vwn/api/mib/V1/downloadPackages/{fileName}/{token}",
+          "method": "GET",
+          "output_encoding": "no-op",
+          "input_headers": ["Authorization"],
+          "extra_config": {
+            "plugin/req-resp-modifier": {
+              "name": ["token-validation"],
+              "token-validation": {
+                "vas": {
+                  "styp": ["T1"],
+                  "issuer": "{{ .Values.env.vas.issuer }}",
+                  "jwk_url": "{{ .Values.env.vas.jwkUrl }}"
+                }
+              }
+            }
+          },
+          "backend": [
+            {
+              "host": ["https://{{ .Values.env.blobStorage.inCarPackageAccountName }}.blob.core.windows.net"],
+              "url_pattern": "/in-car-package-storage-{{ .Values.env.deploymentRegion }}-vwn/{fileName}",
+              "method": "GET",
+              "encoding": "no-op",
+              "extra_config": {
+                "auth/client-credentials": {
+                  "client_id": "{{ "{{" }} env "BLOB_OAUTH_CLIENT_ID" {{ "}}" }}",
+                  "client_secret": "{{ "{{" }} env "BLOB_OAUTH_CLIENT_SECRET" {{ "}}" }}",
+                  "token_url": "https://login.microsoftonline.com/{{ .Values.env.tenantId }}/oauth2/v2.0/token",
+                  "scopes": "https://storage.azure.com/.default"
+                },
+                "backend/http": {
+                  "return_error_details": true
+                },
+                "modifier/martian": {
+                  "header.Modifier": {
+                    "scope": ["request"],
+                    "name": "x-ms-version",
+                    "value": "2026-02-06"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "endpoint": "/seat/api/mib/V1/downloadPackages/{fileName}/{token}",
+          "method": "GET",
+          "output_encoding": "no-op",
+          "input_headers": ["Authorization"],
+          "extra_config": {
+            "plugin/req-resp-modifier": {
+              "name": ["token-validation"],
+              "token-validation": {
+                "vas": {
+                  "styp": ["T1"],
+                  "issuer": "{{ .Values.env.vas.issuer }}",
+                  "jwk_url": "{{ .Values.env.vas.jwkUrl }}"
+                }
+              }
+            }
+          },
+          "backend": [
+            {
+              "host": ["https://{{ .Values.env.blobStorage.inCarPackageAccountName }}.blob.core.windows.net"],
+              "url_pattern": "/in-car-package-storage-{{ .Values.env.deploymentRegion }}-seat/{fileName}",
+              "method": "GET",
+              "encoding": "no-op",
+              "extra_config": {
+                "auth/client-credentials": {
+                  "client_id": "{{ "{{" }} env "BLOB_OAUTH_CLIENT_ID" {{ "}}" }}",
+                  "client_secret": "{{ "{{" }} env "BLOB_OAUTH_CLIENT_SECRET" {{ "}}" }}",
+                  "token_url": "https://login.microsoftonline.com/{{ .Values.env.tenantId }}/oauth2/v2.0/token",
+                  "scopes": "https://storage.azure.com/.default"
+                },
+                "backend/http": {
+                  "return_error_details": true
+                },
+                "modifier/martian": {
+                  "header.Modifier": {
+                    "scope": ["request"],
+                    "name": "x-ms-version",
+                    "value": "2026-02-06"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "endpoint": "/skoda/api/mib/V1/downloadPackages/{fileName}/{token}",
+          "method": "GET",
+          "output_encoding": "no-op",
+          "input_headers": ["Authorization"],
+          "extra_config": {
+            "plugin/req-resp-modifier": {
+              "name": ["token-validation"],
+              "token-validation": {
+                "vas": {
+                  "styp": ["T1"],
+                  "issuer": "{{ .Values.env.vas.issuer }}",
+                  "jwk_url": "{{ .Values.env.vas.jwkUrl }}"
+                }
+              }
+            }
+          },
+          "backend": [
+            {
+              "host": ["https://{{ .Values.env.blobStorage.inCarPackageAccountName }}.blob.core.windows.net"],
+              "url_pattern": "/in-car-package-storage-{{ .Values.env.deploymentRegion }}-skoda/{fileName}",
+              "method": "GET",
+              "encoding": "no-op",
+              "extra_config": {
+                "auth/client-credentials": {
+                  "client_id": "{{ "{{" }} env "BLOB_OAUTH_CLIENT_ID" {{ "}}" }}",
+                  "client_secret": "{{ "{{" }} env "BLOB_OAUTH_CLIENT_SECRET" {{ "}}" }}",
+                  "token_url": "https://login.microsoftonline.com/{{ .Values.env.tenantId }}/oauth2/v2.0/token",
+                  "scopes": "https://storage.azure.com/.default"
+                },
+                "backend/http": {
+                  "return_error_details": true
+                },
+                "modifier/martian": {
+                  "header.Modifier": {
+                    "scope": ["request"],
+                    "name": "x-ms-version",
+                    "value": "2026-02-06"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        {
+          "@comment": "In-Car API - partNumber endpoint",
+          "endpoint": "/api/mib/V1/partNumber",
+          "method": "GET",
+          "output_encoding": "no-op",
+          "input_headers": ["Authorization"],
+          "extra_config": {
+            "plugin/req-resp-modifier": {
+              "name": ["token-validation"],
+              "token-validation": {
+                "vas": {
+                  "styp": ["T1"],
+                  "issuer": "{{ .Values.env.vas.issuer }}",
+                  "jwk_url": "{{ .Values.env.vas.jwkUrl }}"
+                }
+              }
+            }
+          },
+          "backend": [
+            {
+              "host": ["http://in-car-api-service:{{ .Values.env.IN_CAR_API_PORT }}"],
+              "url_pattern": "/api/mib/V1/partNumber",
+              "method": "GET",
+              "encoding": "no-op"
+            }
+          ]
+        },
+        {
+          "@comment": "In-Car API - languages by partNumber endpoint",
+          "endpoint": "/api/mib/V1/languages/{partNumber}",
+          "method": "GET",
+          "output_encoding": "no-op",
+          "input_headers": ["Authorization"],
+          "extra_config": {
+            "plugin/req-resp-modifier": {
+              "name": ["token-validation"],
+              "token-validation": {
+                "vas": {
+                  "styp": ["T1"],
+                  "issuer": "{{ .Values.env.vas.issuer }}",
+                  "jwk_url": "{{ .Values.env.vas.jwkUrl }}"
+                }
+              }
+            }
+          },
+          "backend": [
+            {
+              "host": ["http://in-car-api-service:{{ .Values.env.IN_CAR_API_PORT }}"],
+              "url_pattern": "/api/mib/V1/languages/{partNumber}",
+              "method": "GET",
+              "encoding": "no-op"
+            }
+          ]
+        },
+        {
+          "@comment": "In-Car API - packagesForLanguage by teivonId endpoint",
+          "endpoint": "/api/mib/V1/packagesForLanguage/{teivonId}",
+          "method": "GET",
+          "output_encoding": "no-op",
+          "input_headers": ["Authorization"],
+          "extra_config": {
+            "plugin/req-resp-modifier": {
+              "name": ["token-validation"],
+              "token-validation": {
+                "vas": {
+                  "styp": ["T1"],
+                  "issuer": "{{ .Values.env.vas.issuer }}",
+                  "jwk_url": "{{ .Values.env.vas.jwkUrl }}"
+                }
+              }
+            }
+          },
+          "backend": [
+            {
+              "host": ["http://in-car-api-service:{{ .Values.env.IN_CAR_API_PORT }}"],
+              "url_pattern": "/api/mib/V1/packagesForLanguage/{teivonId}",
+              "method": "GET",
+              "encoding": "no-op"
+            }
+          ]
+        },
+        {
+          "@comment": "In-Car API - statusUpdate",
+          "endpoint": "/api/mib/V1/statusUpdate",
+          "method": "POST",
+          "output_encoding": "no-op",
+          "input_headers": [
+            "Authorization",
+            "Content-Type",
+            "X-Client-Version",
+            "app-version",
+            "request-origin"
+          ],
+          "extra_config": {
+            "plugin/req-resp-modifier": {
+              "name": ["token-validation"],
+              "token-validation": {
+                "vas": {
+                  "styp": ["T1"],
+                  "issuer": "{{ .Values.env.vas.issuer }}",
+                  "jwk_url": "{{ .Values.env.vas.jwkUrl }}"
+                }
+              }
+            }
+          },
+          "backend": [
+            {
+              "host": ["http://in-car-api-service:{{ .Values.env.IN_CAR_API_PORT }}"],
+              "url_pattern": "/api/mib/V1/statusUpdate",
+              "method": "POST",
+              "encoding": "no-op"
+            }
+          ]
+        }
+      ]
+    }
+  env.json: |
+    {}

@@ -1,0 +1,29 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ include "dmb-service.fullname" . }}-netpol
+  labels:
+    {{- include "dmb-service.labels" . | nindent 4 }}
+spec:
+  endpointSelector:
+    matchLabels:
+      {{- include "dmb-service.selectorLabels" . | nindent 6 }}
+  ingress:
+    {{- if .Values.networkPolicy.allowIngressFromNamespace }}
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: {{ .Values.networkPolicy.allowIngressFromNamespace }}
+    {{- end }}
+    {{- if .Values.networkPolicy.allowIngressFromSameNamespace }}
+    - fromEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: {{ .Release.Namespace }}
+    {{- end }}
+  egress:
+    {{- if .Values.networkPolicy.allowEgressToSameNamespace }}
+    - toEndpoints:
+        - matchLabels:
+            k8s:io.kubernetes.pod.namespace: {{ .Release.Namespace }}
+    {{- end }}
+{{- end }}

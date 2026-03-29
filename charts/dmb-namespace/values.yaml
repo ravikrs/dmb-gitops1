@@ -1,0 +1,33 @@
+env:
+  product: dmb
+  stage: CHANGEME        # dev | staging | prod
+  namespace: CHANGEME    # dmb-dev | dmb-staging | dmb-prod
+  tenantId: CHANGEME     # Azure AD tenant ID
+
+# Azure Key Vault name (e.g. kv-dmb-dev-weu)
+vault:
+  name: CHANGEME
+
+# ESO SecretStore — namespace-scoped, references the AKV vault above
+secretstore:
+  name: dmb-secret-store
+
+# Azure Workload Identity ServiceAccount
+serviceAccount:
+  name: CHANGEME          # e.g. dmb-dev-sa
+  clientId: CHANGEME      # managed identity client ID
+
+# Blob storage account names (used to build ExternalSecret keys)
+blobStorage:
+  dmb: CHANGEME           # e.g. stdmbdevweu
+  incar: CHANGEME         # e.g. stincardevweu
+
+# Egress allowlist — Azure and VW Group external FQDNs
+# Each entry: { fqdn: "hostname", ports: ["443"] }
+externalAccess:
+  azure: []
+  # - fqdn: "login.microsoftonline.com"
+  #   ports: ["443"]
+  vwGroup: []
+  # - fqdns: ["api.example.com"]
+  #   ports: ["443"]

@@ -1,0 +1,89 @@
+name: Helm Lint
+
+# Runs on PRs and pushes to main that touch chart definitions or values files.
+# Each chart is linted independently; a representative smoke render catches
+# template errors that lint alone misses.
+
+on:
+  pull_request:
+    paths:
+      - 'charts/**'
+      - 'teams/**'
+  push:
+    branches: [main]
+    paths:
+      - 'charts/**'
+      - 'teams/**'
+
+jobs:
+  lint:
+    name: Lint ${{ matrix.chart }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: [dmb-service, api-gateway, oauth2-proxy, dmb-namespace]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.14.0
+
+      # oauth2-proxy wraps an upstream chart — pull it before linting.
+      - name: Update dependencies
+        if: matrix.chart == 'oauth2-proxy'
+        run: helm dependency update charts/oauth2-proxy
+
+      - name: Lint
+        run: helm lint charts/${{ matrix.chart }}
+
+      # helm template catches rendering errors (missing keys, type mismatches)
+      # that helm lint skips. Both eu-dev and eu-staging are rendered to catch
+      # env-specific values that only appear in one environment. CHANGEME
+      # placeholders are intentional and don't cause render failures.
+      - name: Smoke render (eu-dev)
+        run: |
+          case "${{ matrix.chart }}" in
+            dmb-service)
+              helm template dmb-in-car-api charts/dmb-service \
+                -f teams/dmb/eu-dev/_shared.yaml \
+                -f teams/dmb/eu-dev/services/in-car-api.yaml
+              ;;
+            api-gateway)
+              helm template api-gateway charts/api-gateway \
+                -f teams/dmb/eu-dev/api-gateway-values.yaml
+              ;;
+            oauth2-proxy)
+              helm template oauth2-proxy charts/oauth2-proxy \
+                -f teams/dmb/eu-dev/oauth2-proxy-values.yaml
+              ;;
+            dmb-namespace)
+              helm template dmb-namespace charts/dmb-namespace \
+                -f teams/dmb/eu-dev/dmb-namespace-values.yaml
+              ;;
+          esac
+
+      - name: Smoke render (eu-staging)
+        run: |
+          case "${{ matrix.chart }}" in
+            dmb-service)
+              helm template dmb-in-car-api charts/dmb-service \
+                -f teams/dmb/eu-staging/_shared.yaml \
+                -f teams/dmb/eu-staging/services/in-car-api.yaml
+              ;;
+            api-gateway)
+              helm template api-gateway charts/api-gateway \
+                -f teams/dmb/eu-staging/api-gateway-values.yaml
+              ;;
+            oauth2-proxy)
+              helm template oauth2-proxy charts/oauth2-proxy \
+                -f teams/dmb/eu-staging/oauth2-proxy-values.yaml
+              ;;
+            dmb-namespace)
+              helm template dmb-namespace charts/dmb-namespace \
+                -f teams/dmb/eu-staging/dmb-namespace-values.yaml
+              ;;
+          esac

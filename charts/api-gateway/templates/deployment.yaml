@@ -1,0 +1,116 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Release.Name }}-app"
+  labels:
+    app: "{{ .Release.Name }}-app"
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 100%
+  selector:
+    matchLabels:
+      app: "{{ .Release.Name }}-app"
+  template:
+    metadata:
+      labels:
+        app: "{{ .Release.Name }}-app"
+        azure.workload.identity/use: "true"
+      annotations:
+        checksum/config-krakend: {{ include (print $.Template.BasePath "/configmap-krakend.yaml") . | sha256sum }}
+    spec:
+      {{- if .Values.serviceAccount.name }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- end }}
+      imagePullSecrets:
+        - name: {{ .Values.image.pullSecret | quote }}
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      enableServiceLinks: false
+      automountServiceAccountToken: false
+      containers:
+        - name: api-gateway
+          image: {{ printf "%s:%s" .Values.image.repository .Values.image.tag | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.env.KRAKEND_PORT }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /__health
+              port: {{ .Values.env.KRAKEND_PORT }}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /__health
+              port: {{ .Values.env.KRAKEND_PORT }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          env:
+            - name: FC_ENABLE
+              value: "1"
+            - name: FC_SETTINGS
+              value: "/app/configuration/settings"
+            - name: KRAKEND_PORT
+              value: {{ .Values.env.KRAKEND_PORT | quote }}
+            - name: ADDITIONAL_JWKS_TLS_CERT
+              value: {{ .Values.env.vas.tlsCert | quote }}
+            - name: NEW_RELIC_ENABLED
+              value: "false"
+            - name: BLOB_OAUTH_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Values.env.STAGE }}-api-gateway-secrets"
+                  key: "{{ .Values.env.PRODUCT }}-{{ .Values.env.STAGE }}-blob-reader-client-id"
+            - name: BLOB_OAUTH_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Values.env.STAGE }}-api-gateway-secrets"
+                  key: "{{ .Values.env.PRODUCT }}-{{ .Values.env.STAGE }}-blob-reader-client-secret"
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: krakend-config
+              mountPath: /app/configuration/krakend.json
+              subPath: krakend.json
+              readOnly: true
+            - name: krakend-settings
+              mountPath: /app/configuration/settings
+              readOnly: true
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+        - name: krakend-config
+          configMap:
+            name: "{{ .Release.Name }}-krakend-config"
+            items:
+              - key: krakend.json
+                path: krakend.json
+        - name: krakend-settings
+          configMap:
+            name: "{{ .Release.Name }}-krakend-config"
+            items:
+              - key: env.json
+                path: env.json

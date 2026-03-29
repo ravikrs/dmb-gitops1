@@ -1,0 +1,7 @@
+{
+  "in-car-api":         { "dev": true, "staging": false, "prod": false },
+  "vin-resolver":       { "dev": true, "staging": false, "prod": false },
+  "orchestrator":       { "dev": true, "staging": false, "prod": false },
+  "simulator":          { "dev": true, "staging": false, "prod": false },
+  "in-car-transformer": { "dev": true, "staging": false, "prod": false }
+}

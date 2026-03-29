@@ -1,0 +1,10 @@
+pdb:
+  minAvailable: 0
+
+oauth2-proxy:
+  config:
+    existingSecret: dev-oauth2-proxy-secrets   # created by dmb-namespace chart
+
+  extraArgs:
+    oidc-issuer-url: CHANGEME
+    redirect-url: CHANGEME                     # e.g. https://dmb-dev.apps.example.com/oauth2/callback

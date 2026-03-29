@@ -1,0 +1,73 @@
+nameOverride: in-car-transformer
+
+replicaCount: 3
+
+image:
+  repository: CHANGEME    # e.g. acrdmb.azurecr.io/dmb/in-car-transformer
+  tag: CHANGEME
+
+resources:
+  requests:
+    memory: "3Gi"
+    cpu: "1000m"
+  limits:
+    memory: "3Gi"
+    cpu: "1500m"
+
+grpc:
+  enabled: true
+  port: 50051
+
+envFrom:
+  - secretRef:
+      name: dev-servicebus-secrets
+  - secretRef:
+      name: dev-blob-secrets
+
+env:
+  CLOUD_PUBLICATION_ACCOUNT_NAME: CHANGEME
+  IN_CAR_PACKAGE_ACCOUNT_NAME: CHANGEME
+  CLOUD_PUBLICATION_CONTAINER: CHANGEME
+  IN_CAR_PACKAGE_CONTAINER: CHANGEME
+
+applicationProperties:
+  server:
+    port: ${SERVER_PORT:8080}
+    servlet:
+      context-path: /api
+    error:
+      include-message: never
+      include-stacktrace: never
+    compression:
+      enabled: true
+  management:
+    server:
+      port: ${MANAGEMENT_SERVER_PORT:8081}
+    endpoints:
+      web:
+        exposure:
+          include: health,metrics
+    endpoint:
+      health:
+        probes:
+          enabled: true
+        show-details: when-authorized
+    tracing:
+      enabled: false
+    otlp:
+      metrics:
+        export:
+          enabled: false
+  spring:
+    grpc:
+      client:
+        channels:
+          incar-api-service:
+            address: in-car-api:${GRPC_PORT:50051}
+  logging:
+    level:
+      com.dmb: DEBUG
+      org.springframework.security: WARN
+      com.azure.messaging.servicebus: WARN
+      com.azure.core: WARN
+      root: INFO

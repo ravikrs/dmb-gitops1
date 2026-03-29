@@ -1,0 +1,23 @@
+# Root Application for the eu-prod cluster.
+# Apply this once manually to the eu-prod ArgoCD instance:
+#   kubectl apply -f bootstrap/eu-prod.yaml -n argocd
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: dmb-root-eu-prod
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/ravikrs/dmb-gitops1
+    targetRevision: HEAD
+    path: clusters/eu-prod
+    directory:
+      recurse: false
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

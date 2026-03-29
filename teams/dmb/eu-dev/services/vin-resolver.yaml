@@ -1,0 +1,68 @@
+nameOverride: vin-resolver
+
+replicaCount: 1
+
+image:
+  repository: CHANGEME    # e.g. acrdmb.azurecr.io/dmb/dmcu-vin-resolver
+  tag: CHANGEME
+
+resources:
+  requests:
+    memory: "1Gi"
+    cpu: "1500m"
+  limits:
+    memory: "1Gi"
+    cpu: "1500m"
+
+grpc:
+  enabled: true
+  port: 50051
+
+envFrom:
+  - secretRef:
+      name: dev-postgres-secrets
+  - secretRef:
+      name: dev-dmcu-secrets
+
+env:
+  ORCHESTRATOR_DB_NAME: CHANGEME
+
+applicationProperties:
+  server:
+    port: ${SERVER_PORT:8080}
+    error:
+      include-message: never
+      include-stacktrace: never
+    compression:
+      enabled: true
+  management:
+    server:
+      port: ${MANAGEMENT_SERVER_PORT:8081}
+    endpoints:
+      web:
+        exposure:
+          include: health,metrics
+    endpoint:
+      health:
+        probes:
+          enabled: true
+        show-details: when-authorized
+    tracing:
+      enabled: false
+    otlp:
+      metrics:
+        export:
+          enabled: false
+  spring:
+    datasource:
+      url: jdbc:postgresql://${POSTGRES_HOST}:5432/${ORCHESTRATOR_DB_NAME}
+      username: ${dmb-dev-admin-username}
+      password: ${dmb-dev-admin-password}
+    grpc:
+      server:
+        port: ${GRPC_PORT:50051}
+  logging:
+    level:
+      com.dmb: DEBUG
+      org.springframework.security: WARN
+      root: INFO

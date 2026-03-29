@@ -1,0 +1,53 @@
+nameOverride: simulator
+
+replicaCount: 1
+
+image:
+  repository: CHANGEME    # e.g. acrdmb.azurecr.io/dmb/simulator
+  tag: CHANGEME
+
+resources:
+  requests:
+    memory: "1Gi"
+    cpu: "1000m"
+  limits:
+    memory: "1Gi"
+    cpu: "1500m"
+
+envFrom:
+  - secretRef:
+      name: dev-servicebus-secrets
+  - secretRef:
+      name: dev-blob-secrets
+
+env:
+  CLOUD_PUBLICATION_ACCOUNT_NAME: CHANGEME
+  IN_CAR_PACKAGE_ACCOUNT_NAME: CHANGEME
+
+applicationProperties:
+  server:
+    port: ${SERVER_PORT:8080}
+    error:
+      include-message: never
+      include-stacktrace: never
+    compression:
+      enabled: true
+  management:
+    server:
+      port: ${MANAGEMENT_SERVER_PORT:8081}
+    endpoints:
+      web:
+        exposure:
+          include: health,metrics
+    endpoint:
+      health:
+        probes:
+          enabled: true
+        show-details: when-authorized
+  logging:
+    level:
+      com.dmb: DEBUG
+      org.springframework.security: WARN
+      com.azure.messaging.servicebus: WARN
+      com.azure.core: WARN
+      root: INFO

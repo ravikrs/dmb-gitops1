@@ -1,0 +1,6 @@
+apiVersion: v2
+name: dmb-service
+description: Shared Helm chart for all DMB Spring Boot microservices (in-car-transformer, orchestrator, simulator, vin-resolver, in-car-api).
+type: application
+version: 0.1.0
+appVersion: "latest"

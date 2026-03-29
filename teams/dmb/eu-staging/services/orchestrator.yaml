@@ -1,0 +1,67 @@
+nameOverride: orchestrator
+
+replicaCount: 1
+
+image:
+  repository: CHANGEME    # e.g. acrdmb.azurecr.io/dmb/in-car-orchestrator
+  tag: CHANGEME
+
+resources:
+  requests:
+    memory: "1Gi"
+    cpu: "1500m"
+  limits:
+    memory: "1Gi"
+    cpu: "1500m"
+
+envFrom:
+  - secretRef:
+      name: staging-servicebus-secrets
+  - secretRef:
+      name: staging-blob-secrets
+  - secretRef:
+      name: staging-postgres-secrets
+
+env:
+  ORCHESTRATOR_DB_NAME: CHANGEME
+  CLOUD_PUBLICATION_ACCOUNT_NAME: CHANGEME
+  CLOUD_PUBLICATION_CONTAINER: CHANGEME
+
+applicationProperties:
+  server:
+    port: ${SERVER_PORT:8080}
+    error:
+      include-message: never
+      include-stacktrace: never
+    compression:
+      enabled: true
+  management:
+    server:
+      port: ${MANAGEMENT_SERVER_PORT:8081}
+    endpoints:
+      web:
+        exposure:
+          include: health,metrics
+    endpoint:
+      health:
+        probes:
+          enabled: true
+        show-details: when-authorized
+    tracing:
+      enabled: false
+    otlp:
+      metrics:
+        export:
+          enabled: false
+  spring:
+    datasource:
+      url: jdbc:postgresql://${POSTGRES_HOST}:5432/${ORCHESTRATOR_DB_NAME}
+      username: ${dmb-dev-admin-username}
+      password: ${dmb-dev-admin-password}
+  logging:
+    level:
+      com.dmb: DEBUG
+      org.springframework.security: WARN
+      com.azure.messaging.servicebus: WARN
+      com.azure.core: WARN
+      root: INFO

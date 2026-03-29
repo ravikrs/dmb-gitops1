@@ -1,0 +1,6 @@
+apiVersion: v2
+name: api-gateway
+description: KrakenD API gateway chart. Exposed via Gateway API HTTPRoute (Traefik). nginx Ingress is deprecated.
+type: application
+version: 0.1.0
+appVersion: "latest"

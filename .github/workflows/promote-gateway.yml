@@ -1,0 +1,176 @@
+name: Promote Gateway
+
+# Triggered by api-gateway CI via repository_dispatch after a new image is pushed.
+# Separate from promote-image.yml because the gateway values file is at a different
+# path (api-gateway-values.yaml, not services/<service>.yaml).
+#
+# Dispatch payload:
+#   { "image": "acrdmb.azurecr.io/dmb/api-gateway", "tag": "sha-abc1234" }
+#
+# Promotion model:
+#   eu-dev    → auto-commit to main
+#   eu-staging → PR opened for human review
+#   eu-prod   → PR opened after staging PR is merged (handled by promote-stage.yml)
+
+on:
+  repository_dispatch:
+    types: [gateway-updated]
+  workflow_dispatch:
+    inputs:
+      image:
+        description: 'Full image reference (e.g. acrdmb.azurecr.io/dmb/api-gateway)'
+        required: true
+      tag:
+        description: 'New image tag (e.g. sha-abc1234 or v1.2.3)'
+        required: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: promote-api-gateway
+  cancel-in-progress: true
+
+env:
+  IMAGE: ${{ github.event.client_payload.image || inputs.image }}
+  TAG:   ${{ github.event.client_payload.tag   || inputs.tag }}
+  GIT_USER_NAME:  github-actions[bot]
+  GIT_USER_EMAIL: github-actions[bot]@users.noreply.github.com
+
+jobs:
+  # ── GATES ──────────────────────────────────────────────────────────────────────
+  check-gates:
+    name: Check promotion gates
+    runs-on: ubuntu-latest
+    outputs:
+      dev:     ${{ steps.read.outputs.dev }}
+      staging: ${{ steps.read.outputs.staging }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Validate inputs
+        env:
+          IMAGE: ${{ env.IMAGE }}
+          TAG:   ${{ env.TAG }}
+        run: |
+          if ! [[ "$IMAGE" =~ ^(ghcr\.io|[a-z0-9]+\.azurecr\.io)/[a-z0-9._/-]+$ ]]; then
+            echo "ERROR: invalid IMAGE value: '$IMAGE'"
+            exit 1
+          fi
+          if ! [[ "$TAG" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+            echo "ERROR: invalid TAG value: '$TAG'"
+            exit 1
+          fi
+          echo "Inputs validated: image=${IMAGE} tag=${TAG}"
+
+      - name: Read gates
+        id: read
+        run: |
+          GATES_FILE=".github/promotion-gates.json"
+          if [[ ! -f "$GATES_FILE" ]]; then
+            echo "Gates file not found — defaulting dev=true, staging=false."
+            echo "dev=true"      >> "$GITHUB_OUTPUT"
+            echo "staging=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          DEV=$(jq -r '."api-gateway".dev // true' "$GATES_FILE")
+          STAGING=$(jq -r '."api-gateway".staging // false' "$GATES_FILE")
+          echo "Gates for api-gateway: dev=${DEV} staging=${STAGING}"
+          echo "dev=${DEV}"         >> "$GITHUB_OUTPUT"
+          echo "staging=${STAGING}" >> "$GITHUB_OUTPUT"
+
+  # ── eu-dev (auto-commit) ───────────────────────────────────────────────────────
+  promote-dev:
+    name: Deploy to eu-dev
+    needs: check-gates
+    if: needs.check-gates.outputs.dev == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update image tag in eu-dev
+        env:
+          TAG: ${{ env.TAG }}
+        run: |
+          git pull --rebase origin main
+          FILE="teams/dmb/eu-dev/api-gateway-values.yaml"
+          yq e '.image.tag = strenv("TAG")' -i "$FILE"
+          echo "Updated $FILE:"
+          grep "tag:" "$FILE"
+
+      - name: Commit and push
+        env:
+          TAG: ${{ env.TAG }}
+        run: |
+          git config user.name  "${GIT_USER_NAME}"
+          git config user.email "${GIT_USER_EMAIL}"
+          git add "teams/dmb/eu-dev/api-gateway-values.yaml"
+          if git diff --staged --quiet; then
+            echo "eu-dev/api-gateway already at ${TAG}, skipping commit."
+            exit 0
+          fi
+          git commit -m "chore(dev): promote api-gateway to ${TAG}"
+          # Retry up to 3 times in case another promotion pushes concurrently.
+          for attempt in 1 2 3; do
+            git push origin main && break || {
+              if [[ $attempt -eq 3 ]]; then echo "Push failed after 3 attempts"; exit 1; fi
+              echo "Push rejected (attempt ${attempt}), rebasing..."
+              git pull --rebase origin main
+            }
+          done
+
+  # ── eu-staging (PR) ────────────────────────────────────────────────────────────
+  open-staging-pr:
+    name: Open staging PR
+    needs: [check-gates, promote-dev]
+    if: needs.check-gates.outputs.staging == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create promotion branch and update tag
+        env:
+          TAG: ${{ env.TAG }}
+        run: |
+          BRANCH="promote/eu-staging/api-gateway/${TAG}"
+          git config user.name  "${GIT_USER_NAME}"
+          git config user.email "${GIT_USER_EMAIL}"
+          git checkout -b "$BRANCH"
+          FILE="teams/dmb/eu-staging/api-gateway-values.yaml"
+          yq e '.image.tag = strenv("TAG")' -i "$FILE"
+          git add "$FILE"
+          git commit -m "chore(staging): promote api-gateway to ${TAG}"
+          git push origin "$BRANCH"
+
+      - name: Open pull request
+        env:
+          IMAGE:    ${{ env.IMAGE }}
+          TAG:      ${{ env.TAG }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="promote/eu-staging/api-gateway/${TAG}"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Promote api-gateway:${TAG} to eu-staging" \
+            --body "## Image Promotion: eu-staging
+
+| Field   | Value |
+|---------|-------|
+| Service | \`api-gateway\` |
+| Image   | \`${IMAGE}\` |
+| Tag     | \`${TAG}\` |
+| Target  | eu-staging |
+
+Merging will update \`teams/dmb/eu-staging/api-gateway-values.yaml\` and trigger ArgoCD to sync eu-staging.
+
+After merge, a prod PR will be opened automatically by \`promote-stage.yml\`."

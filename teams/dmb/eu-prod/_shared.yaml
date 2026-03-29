@@ -1,0 +1,30 @@
+# Shared values applied to ALL 5 Spring Boot services in eu-prod.
+# Service-specific values files overlay these.
+
+image:
+  pullPolicy: Always
+  pullSecret: megatron-container-pull-secret
+
+serviceAccount:
+  name: dmb-prod-sa
+
+managementPort: 8081
+
+env:
+  JAVA_TOOL_OPTIONS: "-Dhttps.protocols=TLSv1.2 -XX:MaxDirectMemorySize=1g"
+  PRODUCT: dmb
+  STAGE: prod
+
+opentelemetry:
+  enabled: true
+  containerName: app
+  injectJava: otel-auto-instrumentation
+
+networkPolicy:
+  enabled: true
+  allowIngressFromNamespace: ingress
+  allowIngressFromSameNamespace: true
+  allowEgressToSameNamespace: true
+
+pdb:
+  minAvailable: 1

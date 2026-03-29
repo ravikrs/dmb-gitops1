@@ -1,0 +1,29 @@
+image:
+  repository: CHANGEME        # e.g. acrdmb.azurecr.io/dmb/api-gateway
+  tag: CHANGEME
+
+serviceAccount:
+  name: dmb-staging-sa
+
+env:
+  PRODUCT: dmb
+  STAGE: staging
+  KRAKEND_PORT: 8080
+  IN_CAR_API_PORT: 8080
+  deploymentRegion: CHANGEME  # e.g. weu
+  tenantId: CHANGEME
+  blobStorage:
+    inCarPackageAccountName: CHANGEME
+  vas:
+    issuer: CHANGEME
+    jwkUrl: CHANGEME
+    tlsCert: CHANGEME
+
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: traefik
+      namespace: ingress
+      sectionName: websecure
+  hostnames:
+    - CHANGEME                # e.g. dmb-dev.apps.example.com

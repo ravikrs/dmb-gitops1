@@ -1,0 +1,27 @@
+env:
+  product: dmb
+  stage: dev
+  namespace: dmb-dev
+  tenantId: CHANGEME          # Azure AD tenant ID
+
+vault:
+  name: CHANGEME              # Azure Key Vault name, e.g. kv-dmb-dev-weu
+
+secretstore:
+  name: dmb-secret-store
+
+serviceAccount:
+  name: dmb-dev-sa
+  clientId: CHANGEME          # Managed identity client ID for Workload Identity
+
+blobStorage:
+  dmb: CHANGEME               # DMB blob storage account name
+  incar: CHANGEME             # In-Car blob storage account name
+
+externalAccess:
+  azure:
+    - fqdn: "login.microsoftonline.com"
+      ports: ["443"]
+    - fqdn: "graph.microsoft.com"
+      ports: ["443"]
+  vwGroup: []

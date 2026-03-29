@@ -1,0 +1,39 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: dmb-services-eu-prod
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
+spec:
+  generators:
+    - git:
+        repoURL: https://github.com/ravikrs/dmb-gitops1
+        revision: HEAD
+        files:
+          - path: teams/dmb/eu-prod/services/*.yaml
+  template:
+    metadata:
+      name: 'dmb-{{nameOverride}}-eu-prod'
+      annotations:
+        argocd.argoproj.io/sync-wave: "2"
+    spec:
+      project: default
+      sources:
+        - repoURL: https://github.com/ravikrs/dmb-gitops1
+          path: charts/dmb-service
+          targetRevision: HEAD
+          helm:
+            valueFiles:
+              - $values/teams/dmb/eu-prod/_shared.yaml
+              - $values/teams/dmb/eu-prod/services/{{nameOverride}}.yaml
+        - repoURL: https://github.com/ravikrs/dmb-gitops1
+          targetRevision: HEAD
+          ref: values
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: dmb-prod
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true

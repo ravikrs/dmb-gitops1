@@ -1,0 +1,97 @@
+# Override the chart name for resource naming
+nameOverride: ""
+fullnameOverride: ""
+
+replicaCount: 1
+
+image:
+  repository: ""        # e.g. acrdmb.azurecr.io/dmb/in-car-transformer
+  tag: "latest"
+  pullPolicy: Always
+  pullSecret: megatron-container-pull-secret
+
+resources:
+  requests:
+    memory: "1Gi"
+    cpu: "500m"
+  limits:
+    memory: "1Gi"
+    cpu: "1500m"
+
+# Main application port
+service:
+  port: 8080
+
+# Spring Boot Actuator management port
+managementPort: 8081
+
+# gRPC — enable for services that expose a gRPC endpoint
+grpc:
+  enabled: false
+  port: 50051
+
+# ServiceAccount created by the dmb-namespace chart
+serviceAccount:
+  name: ""
+
+# All Spring Boot config rendered into a single application.yaml ConfigMap.
+# Mounted at /config/application.yaml; picked up via SPRING_CONFIG_ADDITIONAL_LOCATION.
+applicationProperties: {}
+
+# Additional environment variables (key: value map)
+env: {}
+
+# Bulk env injection from existing Secrets or ConfigMaps
+envFrom: []
+# - secretRef:
+#     name: dev-servicebus-secrets
+
+# ESO ExternalSecret — for service-specific secrets not covered by the dmb-namespace chart
+externalSecret:
+  enabled: false
+  secretName: ""           # local k8s secret to create
+  secretStoreName: dmb-secret-store
+  keys: []
+  # - remoteKey: MY_SECRET_KEY
+  #   localKey: MY_SECRET_KEY
+
+# Gateway API HTTPRoute (Traefik)
+httpRoute:
+  enabled: false
+  parentRefs:
+    - name: traefik
+      namespace: ingress
+      sectionName: websecure
+  hostnames: []
+  # - in-car-api.dmb.eu-dev.internal
+
+# CiliumNetworkPolicy — service-level ingress/egress rules
+networkPolicy:
+  enabled: true
+  # Allow inbound from Traefik ingress controller namespace
+  allowIngressFromNamespace: ingress
+  # Allow inbound from pods in the same namespace (intra-cluster gRPC calls etc.)
+  allowIngressFromSameNamespace: true
+  # Allow outbound to pods in the same namespace
+  allowEgressToSameNamespace: true
+
+pdb:
+  minAvailable: 0
+
+# Horizontal Pod Autoscaler — disabled by default, enable per-service in env values
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 90
+
+# OpenTelemetry Java auto-instrumentation
+opentelemetry:
+  enabled: false
+  containerName: app
+  injectJava: otel-auto-instrumentation
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

@@ -1,0 +1,5 @@
+apiVersion: v2
+name: dmb-namespace
+description: Bootstrap chart for DMB namespace-scoped platform resources — SecretStore, ExternalSecrets, ServiceAccount, and CiliumNetworkPolicy egress rules.
+type: application
+version: 0.1.0

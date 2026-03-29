@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: api-gateway-eu-staging
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  project: default
+  sources:
+    - repoURL: https://github.com/ravikrs/dmb-gitops1
+      path: charts/api-gateway
+      targetRevision: HEAD
+      helm:
+        valueFiles:
+          - $values/teams/dmb/eu-staging/api-gateway-values.yaml
+    - repoURL: https://github.com/ravikrs/dmb-gitops1
+      targetRevision: HEAD
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: dmb-staging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

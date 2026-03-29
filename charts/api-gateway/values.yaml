@@ -1,0 +1,52 @@
+replicaCount: 1
+
+image:
+  repository: ""        # e.g. acrdmb.azurecr.io/dmb/api-gateway
+  tag: "latest"
+  pullPolicy: Always
+  pullSecret: megatron-container-pull-secret
+
+resources:
+  requests:
+    memory: "1Gi"
+    cpu: "700m"
+  limits:
+    memory: "1Gi"
+    cpu: "1000m"
+
+serviceAccount:
+  name: ""
+
+env:
+  PRODUCT: CHANGEME
+  STAGE: CHANGEME
+  KRAKEND_PORT: 8080
+  IN_CAR_API_PORT: 8080
+  deploymentRegion: CHANGEME
+  tenantId: CHANGEME
+  blobStorage:
+    inCarPackageAccountName: CHANGEME
+  vas:
+    issuer: CHANGEME
+    jwkUrl: CHANGEME
+    tlsCert: CHANGEME
+
+service:
+  type: ClusterIP
+
+autoscaling:
+  minReplicas: 1
+  maxReplicas: 3
+
+pdb:
+  minAvailable: 0
+
+# Gateway API HTTPRoute (Traefik) — replaces nginx Ingress
+httpRoute:
+  enabled: false
+  parentRefs:
+    - name: traefik
+      namespace: ingress
+      sectionName: websecure
+  hostnames: []
+  # - dmb-dev.apps.example.com
