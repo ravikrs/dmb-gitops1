@@ -123,20 +123,17 @@ jobs:
             --base main \
             --head "$BRANCH" \
             --title "Promote ${SERVICE}:${TAG} to eu-prod" \
-            --body "$(cat <<EOF
-## Image Promotion: eu-prod
+            --body "## Image Promotion: eu-prod
 
-| Field   | Value |
-|---------|-------|
-| Service | \`${SERVICE}\` |
-| Tag     | \`${TAG}\` |
-| Target  | eu-prod |
+          | Field   | Value |
+          |---------|-------|
+          | Service | \`${SERVICE}\` |
+          | Tag     | \`${TAG}\` |
+          | Target  | eu-prod |
 
-This PR was opened automatically after the eu-staging promotion PR was merged.
+          This PR was opened automatically after the eu-staging promotion PR was merged.
 
-Merging will update the eu-prod values file and trigger ArgoCD to sync eu-prod.
-EOF
-)"
+          Merging will update the eu-prod values file and trigger ArgoCD to sync eu-prod."
 
   # ── MANUAL: promote between any two environments ────────────────────────────────
   promote-manual:
@@ -210,16 +207,13 @@ EOF
             --base main \
             --head "$BRANCH" \
             --title "Promote ${SERVICE}:${TAG} to ${TO_ENV}" \
-            --body "$(cat <<EOF
-## Manual Image Promotion
+            --body "## Manual Image Promotion
 
-| Field   | Value |
-|---------|-------|
-| Service | \`${SERVICE}\` |
-| Tag     | \`${TAG}\` |
-| From    | ${FROM_ENV} |
-| Target  | ${TO_ENV} |
+          | Field   | Value |
+          |---------|-------|
+          | Service | \`${SERVICE}\` |
+          | Tag     | \`${TAG}\` |
+          | From    | ${FROM_ENV} |
+          | Target  | ${TO_ENV} |
 
-Merging will update the ${TO_ENV} values file and trigger ArgoCD to sync.
-EOF
-)"
+          Merging will update the ${TO_ENV} values file and trigger ArgoCD to sync."

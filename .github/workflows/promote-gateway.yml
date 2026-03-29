@@ -134,18 +134,15 @@ jobs:
             --base main \
             --head "$BRANCH" \
             --title "Promote api-gateway:${TAG} to eu-staging" \
-            --body "$(cat <<EOF
-## Image Promotion: eu-staging
+            --body "## Image Promotion: eu-staging
 
-| Field   | Value |
-|---------|-------|
-| Service | \`api-gateway\` |
-| Image   | \`${IMAGE}\` |
-| Tag     | \`${TAG}\` |
-| Target  | eu-staging |
+          | Field   | Value |
+          |---------|-------|
+          | Service | \`api-gateway\` |
+          | Image   | \`${IMAGE}\` |
+          | Tag     | \`${TAG}\` |
+          | Target  | eu-staging |
 
-Merging will update \`teams/dmb/eu-staging/api-gateway-values.yaml\` and trigger ArgoCD to sync eu-staging.
+          Merging will update \`teams/dmb/eu-staging/api-gateway-values.yaml\` and trigger ArgoCD to sync eu-staging.
 
-After merge, a prod PR will be opened automatically by \`promote-stage.yml\`.
-EOF
-)"
+          After merge, a prod PR will be opened automatically by \`promote-stage.yml\`."

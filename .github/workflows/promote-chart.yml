@@ -96,23 +96,20 @@ jobs:
             --base main \
             --head "$BRANCH" \
             --title "Promote oauth2-proxy chart ${VERSION} to eu-staging" \
-            --body "$(cat <<EOF
-## oauth2-proxy Chart Promotion: eu-staging
+            --body "## oauth2-proxy Chart Promotion: eu-staging
 
-| Field   | Value |
-|---------|-------|
-| Chart   | \`oauth2-proxy\` (upstream dep) |
-| Version | \`${VERSION}\` |
-| Git tag | \`${TAG}\` |
-| Target  | eu-staging |
+          | Field   | Value |
+          |---------|-------|
+          | Chart   | \`oauth2-proxy\` (upstream dep) |
+          | Version | \`${VERSION}\` |
+          | Git tag | \`${TAG}\` |
+          | Target  | eu-staging |
 
-The upstream chart dependency in \`charts/oauth2-proxy/Chart.yaml\` was bumped by Dependabot and merged to main. **eu-dev has already received this version** (it tracks HEAD).
+          The upstream chart dependency in \`charts/oauth2-proxy/Chart.yaml\` was bumped by Dependabot and merged to main. **eu-dev has already received this version** (it tracks HEAD).
 
-Merging will advance \`clusters/eu-staging/oauth2-proxy.yaml\` \`targetRevision\` to \`${TAG}\` and trigger ArgoCD to sync eu-staging.
+          Merging will advance \`clusters/eu-staging/oauth2-proxy.yaml\` \`targetRevision\` to \`${TAG}\` and trigger ArgoCD to sync eu-staging.
 
-After merge, a prod PR will be opened automatically.
-EOF
-)"
+          After merge, a prod PR will be opened automatically."
 
   # -- Open prod PR (fires when staging chart-promotion PR is merged) ------------
   open-prod-pr:
@@ -171,18 +168,15 @@ EOF
             --base main \
             --head "$BRANCH" \
             --title "Promote oauth2-proxy chart ${VERSION} to eu-prod" \
-            --body "$(cat <<EOF
-## oauth2-proxy Chart Promotion: eu-prod
+            --body "## oauth2-proxy Chart Promotion: eu-prod
 
-| Field   | Value |
-|---------|-------|
-| Chart   | \`oauth2-proxy\` (upstream dep) |
-| Version | \`${VERSION}\` |
-| Git tag | \`${TAG}\` |
-| Target  | eu-prod |
+          | Field   | Value |
+          |---------|-------|
+          | Chart   | \`oauth2-proxy\` (upstream dep) |
+          | Version | \`${VERSION}\` |
+          | Git tag | \`${TAG}\` |
+          | Target  | eu-prod |
 
-This PR was opened automatically after the eu-staging chart promotion PR was merged.
+          This PR was opened automatically after the eu-staging chart promotion PR was merged.
 
-Merging will advance \`clusters/eu-prod/oauth2-proxy.yaml\` \`targetRevision\` to \`${TAG}\` and trigger ArgoCD to sync eu-prod.
-EOF
-)"
+          Merging will advance \`clusters/eu-prod/oauth2-proxy.yaml\` \`targetRevision\` to \`${TAG}\` and trigger ArgoCD to sync eu-prod."
