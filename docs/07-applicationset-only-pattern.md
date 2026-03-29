@@ -90,3 +90,29 @@ Each env's `oauth2-proxy.yaml` has a `chartRevision` field in its list generator
 Only when adding a **new category** of workload that needs a new ApplicationSet (e.g., a new
 shared infrastructure component). For new services — the most common case — the git files
 generator handles it automatically.
+
+## Design note: was the ApplicationSet restructure necessary?
+
+Short answer: **not strictly, but it's the cleaner long-term position.**
+
+The original `clusters/eu-dev/` contained 3 plain `Application` objects + 1 `ApplicationSet`.
+The platform team could have applied that folder directly:
+
+```bash
+kubectl apply -f clusters/eu-dev/
+```
+
+That would have created all 4 resources without any root app involved. The only actual problem
+was `bootstrap/` — the root Application that was auto-creating the child objects (App of Apps).
+Simply deleting `bootstrap/` and telling the platform team to apply `clusters/eu-dev/` directly
+would have resolved the App of Apps concern with minimal change.
+
+We went further and converted everything to `ApplicationSet` because:
+
+- The platform team's stated preference is ApplicationSets over plain Applications.
+- It removes ambiguity about whether a file is "meant to be applied directly" or
+  "meant to be created by a parent app" — everything in `applicationsets/` is always applied directly.
+- It makes the control boundary explicit in the resource kind, not just in folder naming convention.
+
+If the platform team has no objection to plain `Application` resources (only to App of Apps),
+the `clusters/` structure with `bootstrap/` removed would have been equally valid.
