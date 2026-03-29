@@ -192,15 +192,18 @@ jobs:
             --base main \
             --head "$BRANCH" \
             --title "Promote ${SERVICE}:${TAG} to eu-staging" \
-            --body "## Image Promotion: eu-staging
+            --body "$(cat <<EOF
+## Image Promotion: eu-staging
 
-          | Field   | Value |
-          |---------|-------|
-          | Service | \`${SERVICE}\` |
-          | Image   | \`${IMAGE}\` |
-          | Tag     | \`${TAG}\` |
-          | Target  | eu-staging |
+| Field   | Value |
+|---------|-------|
+| Service | \`${SERVICE}\` |
+| Image   | \`${IMAGE}\` |
+| Tag     | \`${TAG}\` |
+| Target  | eu-staging |
 
-          Merging will update \`teams/dmb/eu-staging/services/${SERVICE}.yaml\` and trigger ArgoCD to sync eu-staging.
+Merging will update \`teams/dmb/eu-staging/services/${SERVICE}.yaml\` and trigger ArgoCD to sync eu-staging.
 
-          After merge, a prod PR will be opened automatically by \`promote-stage.yml\`."
+After merge, a prod PR will be opened automatically by \`promote-stage.yml\`.
+EOF
+)"
