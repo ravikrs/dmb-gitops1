@@ -32,8 +32,6 @@ oauth2-proxy:
     set-authorization-header: "false"
     set-xauthrequest: "false"
 
-  # nginx Ingress is deprecated — expose via Gateway API HTTPRoute instead.
-  # Configure HTTPRoute in the clusters/ ArgoCD Application valuesObject if needed.
   ingress:
     enabled: false
 
@@ -47,3 +45,16 @@ oauth2-proxy:
 
   metrics:
     enabled: false
+
+# Gateway API HTTPRoute (Traefik) — exposes /oauth2 prefix for OIDC callback and sign-in flows.
+# The backendRef service name equals .Release.Name (upstream subchart fullname convention).
+# servicePort: 80 is the upstream chart's default ClusterIP service port (targetPort: 4180).
+httpRoute:
+  enabled: false
+  parentRefs:
+    - name: traefik
+      namespace: ingress
+      sectionName: websecure
+  hostnames: []
+  # - dmb-dev.apps.example.com
+  servicePort: 80

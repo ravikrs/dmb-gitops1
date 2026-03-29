@@ -8,6 +8,7 @@ spec:
     matchLabels:
       app.kubernetes.io/name: oauth2-proxy
   ingress:
+    # Traefik runs in the ingress namespace; allow it to reach oauth2-proxy.
     - fromEndpoints:
         - matchLabels:
             k8s:io.kubernetes.pod.namespace: ingress

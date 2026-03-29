@@ -8,3 +8,12 @@ oauth2-proxy:
   extraArgs:
     oidc-issuer-url: CHANGEME
     redirect-url: CHANGEME                     # e.g. https://dmb-dev.apps.example.com/oauth2/callback
+
+httpRoute:
+  enabled: true
+  parentRefs:
+    - name: traefik
+      namespace: ingress
+      sectionName: websecure
+  hostnames:
+    - CHANGEME                                 # e.g. dmb-dev.apps.example.com

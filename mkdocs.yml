@@ -59,3 +59,4 @@ nav:
   - Design Decisions: 02-design-decisions.md
   - CI/CD Pipelines: 03-ci-cd-pipelines.md
   - Reliability Improvements: 04-reliability-improvements.md
+  - oauth2-proxy HTTPRoute + Dependabot: 05-oauth2-proxy-httproute-dependabot.md

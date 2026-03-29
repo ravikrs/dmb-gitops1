@@ -1,0 +1,8 @@
+version: 2
+updates:
+  # Tracks the upstream oauth2-proxy Helm chart dependency in Chart.yaml.
+  # Image tags are managed separately by promote-image.yml.
+  - package-ecosystem: helm
+    directory: /charts/oauth2-proxy
+    schedule:
+      interval: weekly
