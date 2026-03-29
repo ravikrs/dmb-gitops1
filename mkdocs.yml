@@ -60,3 +60,4 @@ nav:
   - CI/CD Pipelines: 03-ci-cd-pipelines.md
   - Reliability Improvements: 04-reliability-improvements.md
   - oauth2-proxy HTTPRoute + Dependabot: 05-oauth2-proxy-httproute-dependabot.md
+  - oauth2-proxy Chart Promotion: 06-oauth2-proxy-chart-promotion.md

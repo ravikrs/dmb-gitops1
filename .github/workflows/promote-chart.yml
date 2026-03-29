@@ -1,0 +1,188 @@
+name: Promote oauth2-proxy Chart
+
+# Fires on two events:
+#
+# 1. Push to main that changes charts/oauth2-proxy/Chart.yaml (Dependabot merge).
+#    - Creates a git tag chart-oauth2-proxy-<upstream-dep-version>
+#    - eu-dev tracks HEAD so ArgoCD picks it up automatically — no action needed
+#    - Opens a staging PR to advance clusters/eu-staging/oauth2-proxy.yaml targetRevision
+#
+# 2. Merged staging chart-promotion PR -> opens a prod PR (mirrors promote-stage.yml pattern).
+#
+# Promotion model:
+#   eu-dev    -> HEAD (auto-deploys on every Dependabot merge)
+#   eu-staging -> PR opened automatically; requires human review + merge
+#   eu-prod   -> PR opened automatically after staging PR merges
+
+on:
+  push:
+    branches: [main]
+    paths: ['charts/oauth2-proxy/Chart.yaml']
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  GIT_USER_NAME:  github-actions[bot]
+  GIT_USER_EMAIL: github-actions[bot]@users.noreply.github.com
+
+jobs:
+  # -- Tag + open staging PR (fires on Dependabot merge to main) -----------------
+  tag-and-open-staging-pr:
+    name: Tag chart version and open staging PR
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Read upstream chart dep version
+        id: version
+        run: |
+          VERSION=$(yq e '.dependencies[0].version' charts/oauth2-proxy/Chart.yaml)
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: unexpected version format: '$VERSION'"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Chart dep version: ${VERSION}"
+
+      - name: Create and push git tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          TAG="chart-oauth2-proxy-${VERSION}"
+          git config user.name  "${GIT_USER_NAME}"
+          git config user.email "${GIT_USER_EMAIL}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists -- Dependabot re-opened same version, skipping."
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+            echo "Created and pushed tag: $TAG"
+          fi
+
+      - name: Open staging PR
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="chart-oauth2-proxy-${VERSION}"
+          BRANCH="promote-chart/eu-staging/oauth2-proxy/${VERSION}"
+          git config user.name  "${GIT_USER_NAME}"
+          git config user.email "${GIT_USER_EMAIL}"
+
+          # Idempotency: skip if a staging PR for this version is already open.
+          if gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number' | grep -q .; then
+            echo "Staging PR for ${VERSION} already open, skipping."
+            exit 0
+          fi
+
+          git checkout -b "$BRANCH"
+          FILE="clusters/eu-staging/oauth2-proxy.yaml"
+          yq e '.spec.sources[0].targetRevision = strenv("TAG")' -i "$FILE"
+          git add "$FILE"
+          git commit -m "chore(staging): advance oauth2-proxy chart to ${TAG}"
+          git push origin "$BRANCH"
+
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Promote oauth2-proxy chart ${VERSION} to eu-staging" \
+            --body "$(cat <<EOF
+## oauth2-proxy Chart Promotion: eu-staging
+
+| Field   | Value |
+|---------|-------|
+| Chart   | \`oauth2-proxy\` (upstream dep) |
+| Version | \`${VERSION}\` |
+| Git tag | \`${TAG}\` |
+| Target  | eu-staging |
+
+The upstream chart dependency in \`charts/oauth2-proxy/Chart.yaml\` was bumped by Dependabot and merged to main. **eu-dev has already received this version** (it tracks HEAD).
+
+Merging will advance \`clusters/eu-staging/oauth2-proxy.yaml\` \`targetRevision\` to \`${TAG}\` and trigger ArgoCD to sync eu-staging.
+
+After merge, a prod PR will be opened automatically.
+EOF
+)"
+
+  # -- Open prod PR (fires when staging chart-promotion PR is merged) ------------
+  open-prod-pr:
+    name: Open prod PR (from merged staging PR)
+    # github.head_ref is untrusted; it is resolved to BRANCH env var and all
+    # values parsed from it are regex-validated before use.
+    if: >
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'promote-chart/eu-staging/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from branch name
+        id: parse
+        env:
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          # Branch format: promote-chart/eu-staging/oauth2-proxy/<version>
+          VERSION="${BRANCH##*/}"
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "ERROR: could not parse a valid semver from branch '$BRANCH'"
+            exit 1
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Parsed version: ${VERSION}"
+
+      - name: Create prod promotion branch
+        env:
+          VERSION: ${{ steps.parse.outputs.version }}
+        run: |
+          TAG="chart-oauth2-proxy-${VERSION}"
+          BRANCH="promote-chart/eu-prod/oauth2-proxy/${VERSION}"
+          git config user.name  "${GIT_USER_NAME}"
+          git config user.email "${GIT_USER_EMAIL}"
+          git checkout -b "$BRANCH"
+
+          FILE="clusters/eu-prod/oauth2-proxy.yaml"
+          yq e '.spec.sources[0].targetRevision = strenv("TAG")' -i "$FILE"
+          git add "$FILE"
+          git commit -m "chore(prod): advance oauth2-proxy chart to ${TAG}"
+          git push origin "$BRANCH"
+
+      - name: Open pull request
+        env:
+          VERSION: ${{ steps.parse.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="chart-oauth2-proxy-${VERSION}"
+          BRANCH="promote-chart/eu-prod/oauth2-proxy/${VERSION}"
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "Promote oauth2-proxy chart ${VERSION} to eu-prod" \
+            --body "$(cat <<EOF
+## oauth2-proxy Chart Promotion: eu-prod
+
+| Field   | Value |
+|---------|-------|
+| Chart   | \`oauth2-proxy\` (upstream dep) |
+| Version | \`${VERSION}\` |
+| Git tag | \`${TAG}\` |
+| Target  | eu-prod |
+
+This PR was opened automatically after the eu-staging chart promotion PR was merged.
+
+Merging will advance \`clusters/eu-prod/oauth2-proxy.yaml\` \`targetRevision\` to \`${TAG}\` and trigger ArgoCD to sync eu-prod.
+EOF
+)"

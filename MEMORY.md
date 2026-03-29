@@ -21,3 +21,6 @@
 - CI/CD doc: docs/03-ci-cd-pipelines.md
 - oauth2-proxy HTTPRoute routes `/oauth2` prefix; backendRef name = `.Release.Name` (not `<release>-oauth2-proxy`) — upstream subchart fullname dedup applies when release name contains chart name
 - Dependabot configured in `.github/dependabot.yml` (helm, /charts/oauth2-proxy, weekly) — tracks Chart.yaml dependencies only, not image tags
+- oauth2-proxy chart uses pinned targetRevision (chart-oauth2-proxy-<version> tags) in staging/prod; eu-dev stays HEAD; promote-chart.yml handles tagging + staging/prod PRs on Dependabot merge
+- Own charts (dmb-service, api-gateway, dmb-namespace) use HEAD — no pinning needed since team controls all changes; values.yaml handles env differences
+- Values source (ref: values) always stays HEAD in all envs so OIDC/hostname changes skip the chart gate
