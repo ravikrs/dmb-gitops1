@@ -1,0 +1,37 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: api-gateway-eu-prod
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  generators:
+    - list:
+        elements:
+          - env: eu-prod
+            namespace: dmb-prod
+  template:
+    metadata:
+      name: api-gateway-eu-prod
+      annotations:
+        argocd.argoproj.io/sync-wave: "1"
+    spec:
+      project: default
+      sources:
+        - repoURL: https://github.com/ravikrs/dmb-gitops1
+          path: charts/api-gateway
+          targetRevision: HEAD
+          helm:
+            valueFiles:
+              - $values/teams/dmb/eu-prod/api-gateway-values.yaml
+        - repoURL: https://github.com/ravikrs/dmb-gitops1
+          targetRevision: HEAD
+          ref: values
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: dmb-prod
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true

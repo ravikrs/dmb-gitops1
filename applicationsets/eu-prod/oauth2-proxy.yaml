@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: ApplicationSet
 metadata:
-  name: oauth2-proxy
+  name: oauth2-proxy-eu-prod
   namespace: argocd
   annotations:
     argocd.argoproj.io/sync-wave: "1"
@@ -9,20 +9,14 @@ spec:
   generators:
     - list:
         elements:
-          # chartRevision is pinned per-env by promote-chart.yml when a Dependabot PR merges.
-          # eu-dev intentionally runs HEAD to catch issues before staging/prod promotion.
-          - env: eu-dev
-            namespace: dmb-dev
-            chartRevision: HEAD
-          - env: eu-staging
-            namespace: dmb-staging
-            chartRevision: chart-oauth2-proxy-10.1.4
+          # chartRevision is pinned to a chart-oauth2-proxy-<version> git tag.
+          # Bumped by promote-chart.yml when a Dependabot PR merges; never changed manually.
           - env: eu-prod
             namespace: dmb-prod
             chartRevision: chart-oauth2-proxy-10.1.4
   template:
     metadata:
-      name: 'oauth2-proxy-{{env}}'
+      name: oauth2-proxy-eu-prod
       annotations:
         argocd.argoproj.io/sync-wave: "1"
     spec:
@@ -35,13 +29,13 @@ spec:
           targetRevision: '{{chartRevision}}'
           helm:
             valueFiles:
-              - $values/teams/dmb/{{env}}/oauth2-proxy-values.yaml
+              - $values/teams/dmb/eu-prod/oauth2-proxy-values.yaml
         - repoURL: https://github.com/ravikrs/dmb-gitops1
           targetRevision: HEAD
           ref: values
       destination:
         server: https://kubernetes.default.svc
-        namespace: '{{namespace}}'
+        namespace: dmb-prod
       syncPolicy:
         automated:
           prune: true

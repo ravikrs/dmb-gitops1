@@ -1,0 +1,41 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: oauth2-proxy-eu-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  generators:
+    - list:
+        elements:
+          # eu-dev runs HEAD — canary for chart upgrades before staging/prod promotion.
+          - env: eu-dev
+            namespace: dmb-dev
+            chartRevision: HEAD
+  template:
+    metadata:
+      name: oauth2-proxy-eu-dev
+      annotations:
+        argocd.argoproj.io/sync-wave: "1"
+    spec:
+      project: default
+      sources:
+        # Chart source uses per-env pinned revision so staging/prod are promotion-gated.
+        # Values source stays on HEAD so OIDC config / hostname changes deploy immediately.
+        - repoURL: https://github.com/ravikrs/dmb-gitops1
+          path: charts/oauth2-proxy
+          targetRevision: '{{chartRevision}}'
+          helm:
+            valueFiles:
+              - $values/teams/dmb/eu-dev/oauth2-proxy-values.yaml
+        - repoURL: https://github.com/ravikrs/dmb-gitops1
+          targetRevision: HEAD
+          ref: values
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: dmb-dev
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true

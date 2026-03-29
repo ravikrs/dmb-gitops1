@@ -1,0 +1,39 @@
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: dmb-namespace-eu-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  generators:
+    - list:
+        elements:
+          - env: eu-dev
+            namespace: dmb-dev
+  template:
+    metadata:
+      name: dmb-namespace-eu-dev
+      annotations:
+        argocd.argoproj.io/sync-wave: "0"
+    spec:
+      project: default
+      sources:
+        - repoURL: https://github.com/ravikrs/dmb-gitops1
+          path: charts/dmb-namespace
+          targetRevision: HEAD
+          helm:
+            valueFiles:
+              - $values/teams/dmb/eu-dev/dmb-namespace-values.yaml
+        - repoURL: https://github.com/ravikrs/dmb-gitops1
+          targetRevision: HEAD
+          ref: values
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: dmb-dev
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=false
