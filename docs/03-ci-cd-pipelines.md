@@ -117,3 +117,36 @@ To trigger promotion from an application CI pipeline, add a step like:
 - All GitHub expression values (`client_payload.*`, `inputs.*`) are resolved to shell env vars via `env:` blocks before use in `run:` scripts — never inlined directly.
 - Service names and image tags are regex-validated in the `check-gates` job before any downstream job runs.
 - The `promote-stage.yml` `open-prod-pr` job parses branch names that were set by the bot — the parsed values are still validated with regex before use.
+
+---
+
+## Known Gotchas
+
+### Heredocs break YAML block scalars
+
+Do **not** use shell heredocs (`<<EOF ... EOF`) inside `run: |` blocks for multi-line `--body` strings. YAML block scalars require all non-empty content lines to be indented at least as much as the first content line. A bare `EOF` terminator at column 0 ends the YAML scalar prematurely, causing an "Invalid workflow file" syntax error.
+
+**Broken pattern:**
+```yaml
+run: |
+  gh pr create \
+    --body "$(cat <<EOF
+## Title
+
+| col | col |
+|-----|-----|
+| a   | b   |
+EOF
+)"
+```
+
+**Correct pattern** — keep body text indented inside the quoted string; YAML strips the common indentation so shell and GitHub receive the body with no leading spaces:
+```yaml
+run: |
+  gh pr create \
+    --body "## Title
+
+  | col | col |
+  |-----|-----|
+  | a   | b   |"
+```
