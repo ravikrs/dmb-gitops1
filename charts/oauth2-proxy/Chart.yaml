@@ -8,4 +8,4 @@ appVersion: "v7.14.3"
 dependencies:
   - name: oauth2-proxy
     repository: https://oauth2-proxy.github.io/manifests
-    version: 10.1.4
+    version: 10.4.3
